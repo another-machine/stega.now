@@ -8,6 +8,9 @@
     />
     <title>stega-now</title>
     <style>
+      :root {
+        color-scheme: light dark;
+      }
       html,
       body {
         height: 100%;
@@ -16,18 +19,24 @@
         margin: 0;
         display: flex;
         flex-direction: column;
-        font: 14px/1.5 monospace;
+        font: 11px/1.4 monospace;
         background: #fff;
         color: #000;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #000;
+          color: #fff;
+        }
       }
       button {
         font: inherit;
       }
       #bar {
         display: none;
-        gap: 6px;
+        gap: 4px;
         align-items: center;
-        padding: 6px 8px;
+        padding: 2px 4px;
         border-bottom: 1px solid;
         flex-wrap: wrap;
       }
@@ -68,18 +77,19 @@
         word-break: break-word;
       }
       #lib {
-        padding: 16px;
+        padding: 10px;
       }
       #grid {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
-        margin: 12px 0;
+        gap: 8px;
+        margin: 8px 0;
       }
       .cart {
-        padding: 8px;
+        padding: 5px;
         border: 1px solid;
         background: none;
+        color: inherit;
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
@@ -87,9 +97,9 @@
       }
       .cart img {
         display: block;
-        width: 128px;
+        width: 72px;
         image-rendering: pixelated;
-        margin: 0 auto 6px;
+        margin: 0 auto 4px;
         pointer-events: none;
       }
     </style>
