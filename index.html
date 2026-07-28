@@ -70,6 +70,11 @@
       #stage img {
         max-width: 100%;
         image-rendering: pixelated;
+        cursor: zoom-in;
+      }
+      #stage img.full {
+        max-width: none;
+        cursor: zoom-out;
       }
       #stage pre {
         margin: 0;
@@ -137,13 +142,16 @@
            audio/L*  → raw STGC PCM via Web Audio
            audio/*   → <audio> element
            anything  → download link
-         Cartridges you add are kept in localStorage; when nothing
-         is playing, the library shows them. Click to play, hold to
+         Cartridges you add are kept as blobs in IndexedDB (disk-
+         scale quota — big images are fine); the active pointer and
+         per-cartridge app data stay in localStorage (small, and the
+         app-data seed must be read synchronously). When nothing is
+         playing, the library shows them. Click to play, hold to
          delete. ?src=<url> fetches, stores, and plays a cartridge.
          ========================================================== */
 
-      const LIB = "stega-now:lib";
       const ACT = "stega-now:active";
+      const OLDLIB = "stega-now:lib"; // pre-IndexedDB base64 store, migrated on boot
       const appKey = (id) => "stega-now:app:" + id;
       const $ = (id) => document.getElementById(id);
 
@@ -155,51 +163,96 @@
         audioTimer = null;
       const blobUrls = [];
 
-      // ---- storage ------------------------------------------------
-      function b64FromBytes(u8) {
-        let s = "";
-        for (let i = 0; i < u8.length; i += 0x8000)
-          s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
-        return btoa(s);
+      // ---- cartridge store (IndexedDB) ----------------------------
+      let dbPromise = null;
+      function db() {
+        if (!dbPromise)
+          dbPromise = new Promise((res, rej) => {
+            const r = indexedDB.open("stega-now", 1);
+            r.onupgradeneeded = () =>
+              r.result.createObjectStore("carts", { keyPath: "id" });
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          });
+        return dbPromise;
       }
+      function carts(mode, fn) {
+        return db().then(
+          (d) =>
+            new Promise((res, rej) => {
+              const t = d.transaction("carts", mode);
+              const req = fn(t.objectStore("carts"));
+              t.oncomplete = () => res(req && req.result);
+              t.onerror = () => rej(t.error);
+              t.onabort = () => rej(t.error);
+            }),
+        );
+      }
+      const libAll = () => carts("readonly", (s) => s.getAll());
+      const libPut = (rec) => carts("readwrite", (s) => s.put(rec));
+      const libDel = (id) => carts("readwrite", (s) => s.delete(id));
+
+      async function hashBytes(bytes) {
+        const h = await crypto.subtle.digest("SHA-256", bytes);
+        return Array.from(new Uint8Array(h), (b) =>
+          b.toString(16).padStart(2, "0"),
+        ).join("");
+      }
+
+      async function addToLib(name, bytes) {
+        const hash = await hashBytes(bytes);
+        const lib = await libAll();
+        const dup = lib.find((r) => r.hash === hash);
+        if (dup) return dup;
+        const rec = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name,
+          hash,
+          blob: new Blob([bytes], { type: "image/png" }),
+        };
+        try {
+          await libPut(rec);
+        } catch (_) {
+          alert("cartridge could not be saved — playing without saving");
+        }
+        return rec;
+      }
+      async function removeFromLib(id) {
+        try {
+          await libDel(id);
+        } catch (_) {}
+        try {
+          localStorage.removeItem(appKey(id));
+          if (localStorage.getItem(ACT) === id) localStorage.removeItem(ACT);
+        } catch (_) {}
+      }
+
+      // one-time migration of the old base64 localStorage library
       function bytesFromB64(b64) {
         const s = atob(b64);
         const u8 = new Uint8Array(s.length);
         for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
         return u8;
       }
-      function readLib() {
+      async function migrateOldLib() {
+        let old = null;
         try {
-          return JSON.parse(localStorage.getItem(LIB)) || [];
-        } catch (_) {
-          return [];
-        }
-      }
-      function writeLib(lib) {
-        localStorage.setItem(LIB, JSON.stringify(lib));
-      }
-      function addToLib(name, bytes) {
-        const b64 = b64FromBytes(bytes);
-        const lib = readLib();
-        const dup = lib.find((r) => r.b64 === b64);
-        if (dup) return dup;
-        const rec = {
-          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-          name,
-          b64,
-        };
+          old = JSON.parse(localStorage.getItem(OLDLIB));
+        } catch (_) {}
+        if (Array.isArray(old))
+          for (const r of old) {
+            try {
+              const bytes = bytesFromB64(r.b64);
+              await libPut({
+                id: r.id,
+                name: r.name,
+                hash: await hashBytes(bytes),
+                blob: new Blob([bytes], { type: "image/png" }),
+              });
+            } catch (_) {}
+          }
         try {
-          writeLib(lib.concat([rec]));
-        } catch (_) {
-          alert("cartridge too big for local storage — playing without saving");
-        }
-        return rec;
-      }
-      function removeFromLib(id) {
-        try {
-          writeLib(readLib().filter((r) => r.id !== id));
-          localStorage.removeItem(appKey(id));
-          if (localStorage.getItem(ACT) === id) localStorage.removeItem(ACT);
+          localStorage.removeItem(OLDLIB);
         } catch (_) {}
       }
 
@@ -342,6 +395,10 @@
         prog.value = 0;
         const tm = document.createElement("span");
         tm.textContent = " 0:00 / " + fmtTime(dur);
+        const loopCb = document.createElement("input");
+        loopCb.type = "checkbox";
+        const loopLab = document.createElement("label");
+        loopLab.append(loopCb, " loop");
         pane.append(
           (e.name || "audio") +
             " (" +
@@ -355,7 +412,12 @@
           " ",
           prog,
           tm,
+          " ",
+          loopLab,
         );
+        loopCb.addEventListener("change", () => {
+          if (audioSrc) audioSrc.loop = loopCb.checked;
+        });
 
         let startedAt = 0,
           playing = false;
@@ -375,6 +437,7 @@
           stopAudio();
           audioSrc = audioCtx.createBufferSource();
           audioSrc.buffer = buf;
+          audioSrc.loop = loopCb.checked;
           audioSrc.connect(audioCtx.destination);
           audioSrc.onended = () => {
             btn.textContent = "play";
@@ -387,7 +450,9 @@
           playing = true;
           btn.textContent = "stop";
           audioTimer = setInterval(() => {
-            const t = Math.min(dur, audioCtx.currentTime - startedAt);
+            const raw = audioCtx.currentTime - startedAt;
+            const t =
+              audioSrc && audioSrc.loop ? raw % dur : Math.min(dur, raw);
             prog.value = t / dur;
             tm.textContent = " " + fmtTime(t) + " / " + fmtTime(dur);
           }, 100);
@@ -433,6 +498,8 @@
           blobUrls.push(url);
           img.src = url;
           img.alt = e.name || "image entry";
+          img.title = "click to toggle 100% size";
+          img.addEventListener("click", () => img.classList.toggle("full"));
           pane.appendChild(img);
           stage.appendChild(pane);
         } else if (kind === "audio") {
@@ -445,7 +512,12 @@
           );
           blobUrls.push(url);
           au.src = url;
-          pane.appendChild(au);
+          const loopCb = document.createElement("input");
+          loopCb.type = "checkbox";
+          loopCb.addEventListener("change", () => (au.loop = loopCb.checked));
+          const loopLab = document.createElement("label");
+          loopLab.append(loopCb, " loop");
+          pane.append(au, " ", loopLab);
           stage.appendChild(pane);
         } else if (kind === "pcm") {
           stage.appendChild(buildPcmPlayer(e));
@@ -484,7 +556,7 @@
       async function play(rec) {
         let dec;
         try {
-          dec = await decodeBytes(bytesFromB64(rec.b64));
+          dec = await decodeBytes(new Uint8Array(await rec.blob.arrayBuffer()));
         } catch (err) {
           $("err").textContent = "✗ " + rec.name + ": " + err.message;
           removeActive();
@@ -523,16 +595,20 @@
       }
 
       // ---- library ------------------------------------------------
-      function renderGrid() {
+      const gridUrls = [];
+      async function renderGrid() {
         const grid = $("grid");
+        for (const u of gridUrls.splice(0)) URL.revokeObjectURL(u);
         grid.innerHTML = "";
-        const lib = readLib();
+        const lib = await libAll();
         $("hint").hidden = !lib.length;
         for (const rec of lib) {
           const b = document.createElement("button");
           b.className = "cart";
           const img = document.createElement("img");
-          img.src = "data:image/png;base64," + rec.b64;
+          const url = URL.createObjectURL(rec.blob);
+          gridUrls.push(url);
+          img.src = url;
           img.alt = rec.name;
           b.appendChild(img);
           b.appendChild(document.createTextNode(rec.name));
@@ -543,10 +619,8 @@
             held = false;
             holdT = setTimeout(() => {
               held = true;
-              if (confirm("delete " + rec.name + "?")) {
-                removeFromLib(rec.id);
-                renderGrid();
-              }
+              if (confirm("delete " + rec.name + "?"))
+                removeFromLib(rec.id).then(renderGrid);
             }, 650);
           });
           for (const t of ["pointerup", "pointerleave", "pointercancel"])
@@ -579,11 +653,16 @@
           $("err").textContent = "✗ " + f.name + ": " + err.message;
           return;
         }
-        play(addToLib(f.name, bytes));
+        play(await addToLib(f.name, bytes));
       });
 
       // ---- startup ------------------------------------------------
       (async () => {
+        try {
+          if (navigator.storage && navigator.storage.persist)
+            navigator.storage.persist(); // ask not to evict under disk pressure
+        } catch (_) {}
+        await migrateOldLib();
         const qs = new URLSearchParams(location.search);
         const src = qs.get("src");
         if (src) {
@@ -592,16 +671,17 @@
             if (!r.ok) throw new Error("fetch failed: " + r.status);
             const bytes = new Uint8Array(await r.arrayBuffer());
             await decodeBytes(bytes);
-            if (
-              await play(addToLib(src.split("/").pop() || "cartridge.png", bytes))
-            )
-              return;
+            const rec = await addToLib(
+              src.split("/").pop() || "cartridge.png",
+              bytes,
+            );
+            if (await play(rec)) return;
           } catch (err) {
             $("err").textContent = "✗ " + err.message;
           }
         }
         const act = localStorage.getItem(ACT);
-        const rec = readLib().find((r) => r.id === act);
+        const rec = (await libAll()).find((r) => r.id === act);
         if (rec && (await play(rec))) return;
         renderGrid();
       })();

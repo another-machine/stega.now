@@ -20,10 +20,17 @@ appears only when there is more than one.
 
 ## Library
 
-Added cartridges are kept in `localStorage`. When nothing is playing you see
-the library: the cartridge images themselves. Click one to play it, **hold it
-down to delete it**, `add` to load a new PNG. The playing cartridge stays
-active across reloads until you eject.
+Added cartridges are kept as blobs in IndexedDB (disk-scale quota, so big
+images are fine; `navigator.storage.persist()` is requested against
+eviction). The active pointer and per-cartridge app data stay in
+`localStorage`. When nothing is playing you see the library: the cartridge
+images themselves. Click one to play it, **hold it down to delete it**, `add`
+to load a new PNG. The playing cartridge stays active across reloads until
+you eject. A pre-IndexedDB `stega-now:lib` localStorage library is migrated
+automatically on boot.
+
+Audio entries (raw PCM and file payloads alike) have a loop toggle; image
+entries click between fit and 100% pixel size.
 
 `?src=<url>` fetches a cartridge PNG (same-origin or CORS), stores it in the
 library, and plays it — a direct link to an app.
