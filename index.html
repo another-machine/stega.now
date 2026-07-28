@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>stegassette console</title>
+<style>
+:root{
+  --bg:#0b0c10;
+  --panel:#14161d;
+  --line:rgba(235,238,245,.14);
+  --fg:#ebeef5;
+  --muted:rgba(235,238,245,.5);
+  --accent:#ef9b2f;
+  --bad:#d8456b;
+  --ok:#7ad48a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:var(--bg);color:var(--fg);
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:13px;line-height:1.5;
+}
+button{font:inherit;cursor:pointer}
+a{color:var(--accent)}
+
+/* ---- loader ---- */
+#loader{
+  position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;
+}
+#loader .logo{font-size:15px;letter-spacing:.35em;text-transform:uppercase}
+#loader .logo b{color:var(--accent);font-weight:600}
+#drop{
+  width:min(440px,90vw);padding:44px 24px;border:1px dashed var(--line);
+  border-radius:10px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s;
+}
+#drop.over,#drop:hover{border-color:var(--accent);color:var(--fg)}
+#drop input{display:none}
+#loader .slot{font-size:11px;color:var(--muted)}
+#loader .slot b{color:var(--fg);font-weight:600}
+#loaderr{color:var(--bad);font-size:12px;max-width:440px;min-height:1em}
+
+/* ---- stage ---- */
+#stage{position:fixed;inset:0;display:none}
+#stage.on{display:block}
+#stage iframe{width:100%;height:100%;border:0;display:block;background:#fff}
+#stage .pane{
+  width:100%;height:100%;overflow:auto;display:flex;
+  align-items:center;justify-content:center;padding:28px;
+}
+#stage .pane.text{align-items:flex-start;justify-content:flex-start}
+#stage pre{
+  margin:0;white-space:pre-wrap;word-break:break-word;
+  font:inherit;color:var(--fg);max-width:72ch;
+}
+#stage img{max-width:100%;max-height:100%;image-rendering:pixelated}
+
+/* ---- audio widget ---- */
+.audioBox{display:flex;flex-direction:column;gap:14px;align-items:center;width:min(420px,86vw)}
+.audioBox .aname{color:var(--muted);font-size:12px;word-break:break-all;text-align:center}
+.audioBox .row{display:flex;gap:12px;align-items:center;width:100%}
+.audioBox button.play{
+  width:52px;height:52px;border-radius:50%;border:1px solid var(--line);
+  background:var(--panel);color:var(--fg);font-size:16px;flex-shrink:0;
+}
+.audioBox button.play:hover{border-color:var(--accent)}
+.audioBox .prog{flex:1;height:4px;border-radius:99px;background:var(--line);overflow:hidden}
+.audioBox .prog i{display:block;height:100%;width:0%;background:var(--accent)}
+.audioBox .tm{font-size:11px;color:var(--muted);min-width:80px;text-align:right}
+audio{width:min(420px,86vw)}
+
+/* ---- console pill + drawer ---- */
+#pill{
+  position:fixed;left:12px;bottom:12px;z-index:60;
+  width:34px;height:34px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(11,12,16,.75);color:var(--muted);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;font-size:14px;
+}
+#pill.on{display:flex}
+#pill:hover{color:var(--fg);border-color:var(--accent)}
+body.dopen #pill{display:none}
+#drawer .hd .x{
+  background:none;border:1px solid var(--line);border-radius:50%;color:var(--muted);
+  width:26px;height:26px;line-height:1;padding:0;margin-left:auto;
+}
+#drawer .hd .x:hover{color:var(--fg);border-color:var(--accent)}
+#drawer{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;transform:translateY(102%);
+  transition:transform .22s ease;background:var(--panel);
+  border-top:1px solid var(--line);max-height:70vh;overflow:auto;
+  padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+#drawer.open{transform:none;box-shadow:0 -18px 50px rgba(0,0,0,.5)}
+#drawer .hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+#drawer .hd .t{letter-spacing:.3em;text-transform:uppercase;font-size:12px}
+#drawer .hd .t b{color:var(--accent);font-weight:600}
+#drawer .meta{color:var(--muted);font-size:11px;margin-top:6px;line-height:1.7}
+#drawer .meta b{color:var(--fg);font-weight:600}
+#entries{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+#entries li{display:flex}
+#entries button{
+  flex:1;display:flex;gap:10px;align-items:baseline;text-align:left;
+  background:none;border:1px solid var(--line);border-radius:7px;
+  color:var(--fg);padding:9px 12px;
+}
+#entries button:hover{border-color:var(--accent)}
+#entries li.sel button{border-color:var(--accent);background:rgba(239,155,47,.08)}
+#entries .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);min-width:52px}
+#entries .n{flex:1;word-break:break-all}
+#entries .s{color:var(--muted);font-size:11px}
+#drawer .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+#drawer .acts button,#drawer .acts label{
+  background:none;border:1px solid var(--line);border-radius:99px;color:var(--muted);
+  padding:7px 14px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
+}
+#drawer .acts button:hover,#drawer .acts label:hover{color:var(--fg);border-color:var(--accent)}
+#drawer .acts .eject:hover{border-color:var(--bad);color:var(--bad)}
+#drawer .note{margin-top:12px;font-size:11px;color:var(--muted)}
+#drawer .note .warn{color:var(--bad)}
+#drawer input[type=file]{display:none}
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="logo">stegassette <b>console</b></div>
+  <label id="drop">
+    drop a cartridge PNG<br>or click to choose a file
+    <input type="file" id="file" accept="image/png,image/*">
+  </label>
+  <div class="slot">slot <b id="slotname"></b> · a loaded cartridge stays in this slot until ejected</div>
+  <div id="loaderr"></div>
+</div>
+
+<div id="stage"></div>
+
+<button id="pill" title="console (Esc)">▤</button>
+<div id="drawer">
+  <div class="hd">
+    <span class="t">stegassette <b>console</b></span>
+    <span class="meta" id="slotmeta"></span>
+    <button class="x" id="closedrawer" title="close">✕</button>
+  </div>
+  <div class="meta" id="cartmeta"></div>
+  <ul id="entries"></ul>
+  <div class="acts">
+    <label for="file2">load cartridge<input type="file" id="file2" accept="image/png,image/*"></label>
+    <button class="eject" id="eject">eject (clear slot)</button>
+  </div>
+  <div class="note" id="cachenote"></div>
+</div>
+
+<script src="lib/steg-core.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   stegassette console — loads a STGC cartridge PNG, decodes its
+   entries with steg-core, and plays back whatever it holds:
+     text/html  → full-screen app (srcdoc iframe)
+     text/*     → text pane
+     image/*    → image pane
+     audio/L*   → raw STGC PCM via Web Audio
+     audio/*    → <audio> element (mp3/wav/ogg payloads)
+     anything   → download link
+   The cartridge bytes persist in localStorage per slot:
+     ?local=<slot>   pick the slot (default "default")
+     ?reset          hard-reset the slot, then show the loader
+     ?src=<url>      fetch a cartridge PNG from a URL (CORS permitting)
+   Loading a new cartridge always overwrites the current slot.
+   ============================================================ */
+
+const qs = new URLSearchParams(location.search);
+const slot = (qs.get("local") || "default").replace(/[^\w.-]/g, "") || "default";
+const LSKEY = "stegassette-console:" + slot;
+
+if (qs.has("reset")) {
+  try { localStorage.removeItem(LSKEY); } catch (_) {}
+  qs.delete("reset");
+  history.replaceState(null, "", location.pathname + (qs.toString() ? "?" + qs.toString() : ""));
+}
+
+const $ = (id) => document.getElementById(id);
+const loaderEl = $("loader"), stageEl = $("stage"), pillEl = $("pill"), drawerEl = $("drawer");
+$("slotname").textContent = slot;
+
+let cart = null;      // { name, bytes, entries, opts, W, H, cached }
+let selected = -1;
+let audioCtx = null, audioSrc = null, audioTimer = null;
+const blobUrls = [];
+
+// ---- storage --------------------------------------------------
+function b64FromBytes(u8) {
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000)
+    s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function bytesFromB64(b64) {
+  const s = atob(b64);
+  const u8 = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+  return u8;
+}
+function saveSlot(name, bytes) {
+  try {
+    localStorage.setItem(LSKEY, JSON.stringify({ name, at: Date.now(), b64: b64FromBytes(bytes) }));
+    return true;
+  } catch (_) {
+    return false; // quota — play uncached
+  }
+}
+function readSlot() {
+  try {
+    const raw = localStorage.getItem(LSKEY);
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    return { name: j.name || "cartridge.png", bytes: bytesFromB64(j.b64) };
+  } catch (_) {
+    return null;
+  }
+}
+function clearSlot() {
+  try { localStorage.removeItem(LSKEY); } catch (_) {}
+}
+
+// ---- decode ---------------------------------------------------
+async function decodeBytes(bytes) {
+  const blob = new Blob([bytes], { type: "image/png" });
+  let bmp;
+  try {
+    bmp = await createImageBitmap(blob, { colorSpaceConversion: "none" });
+  } catch (_) {
+    bmp = await createImageBitmap(blob); // older browsers
+  }
+  const W = bmp.width, H = bmp.height;
+  const cnv = Object.assign(document.createElement("canvas"), { width: W, height: H });
+  const ctx = cnv.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close();
+  const px = ctx.getImageData(0, 0, W, H).data;
+  const img = new StegCore.Img(W, H, new Uint8Array(px));
+  const { entries, opts } = StegCore.decodeContainer(img, img); // image is its own key
+  return { entries, opts, W, H };
+}
+
+// ---- entry classification ------------------------------------
+function kindOf(mimetype) {
+  const m = (mimetype || "").toLowerCase();
+  if (m.startsWith("text/html")) return "html";
+  if (m.startsWith("audio/l")) return "pcm";
+  if (m.startsWith("audio/")) return "audio";
+  if (m.startsWith("image/")) return "image";
+  if (m.startsWith("text/") || m === "application/json") return "text";
+  return "file";
+}
+function fmtSize(n) {
+  return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(2) + " MB";
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// ---- stage renderers -----------------------------------------
+function stopAudio() {
+  if (audioSrc) { try { audioSrc.stop(); } catch (_) {} audioSrc = null; }
+  if (audioTimer) { clearInterval(audioTimer); audioTimer = null; }
+}
+function clearStage() {
+  stopAudio();
+  for (const u of blobUrls.splice(0)) URL.revokeObjectURL(u);
+  stageEl.innerHTML = "";
+}
+
+function showEntry(i) {
+  const e = cart.entries[i];
+  if (!e) return;
+  selected = i;
+  clearStage();
+  const kind = kindOf(e.mimetype);
+
+  if (kind === "html") {
+    const iframe = document.createElement("iframe");
+    iframe.allow = "fullscreen";
+    iframe.srcdoc = new TextDecoder().decode(e.data);
+    stageEl.appendChild(iframe);
+  } else if (kind === "text") {
+    const pane = document.createElement("div");
+    pane.className = "pane text";
+    const pre = document.createElement("pre");
+    pre.textContent = new TextDecoder().decode(e.data);
+    pane.appendChild(pre);
+    stageEl.appendChild(pane);
+  } else if (kind === "image") {
+    const pane = document.createElement("div");
+    pane.className = "pane";
+    const img = document.createElement("img");
+    const url = URL.createObjectURL(new Blob([e.data], { type: e.mimetype }));
+    blobUrls.push(url);
+    img.src = url;
+    img.alt = e.name || "image entry";
+    pane.appendChild(img);
+    stageEl.appendChild(pane);
+  } else if (kind === "audio") {
+    const pane = document.createElement("div");
+    pane.className = "pane";
+    const au = document.createElement("audio");
+    au.controls = true;
+    const url = URL.createObjectURL(new Blob([e.data], { type: e.mimetype }));
+    blobUrls.push(url);
+    au.src = url;
+    pane.appendChild(au);
+    stageEl.appendChild(pane);
+  } else if (kind === "pcm") {
+    stageEl.appendChild(buildPcmPlayer(e));
+  } else {
+    const pane = document.createElement("div");
+    pane.className = "pane";
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(new Blob([e.data], { type: e.mimetype || "application/octet-stream" }));
+    blobUrls.push(url);
+    a.href = url;
+    a.download = e.name || "entry.bin";
+    a.textContent = `download ${e.name || "entry"} (${fmtSize(e.data.length)})`;
+    pane.appendChild(a);
+    stageEl.appendChild(pane);
+  }
+  renderEntryList();
+}
+
+// raw STGC PCM (audio/L8|16|24 per RFC 2586) → Web Audio
+function buildPcmPlayer(e) {
+  const fmt = StegCore.parseAudioMime(e.mimetype);
+  const f32 = StegCore.toFloat32(e.data, fmt.bits);
+  const planar = StegCore.unlayoutChannels({
+    f32, layout: fmt.layout, channels: fmt.channels, blockSize: fmt.blockSize,
+  });
+  const N = (planar.length / fmt.channels) | 0;
+  const dur = N / fmt.rate;
+
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  const box = document.createElement("div");
+  box.className = "audioBox";
+  box.innerHTML =
+    `<div class="aname">${esc(e.name || "audio")} · ${fmt.bits}-bit ${fmt.rate} Hz × ${fmt.channels}ch</div>` +
+    `<div class="row"><button class="play">▶</button>` +
+    `<div class="prog"><i></i></div><span class="tm">0:00 / ${fmtTime(dur)}</span></div>`;
+  const btn = box.querySelector(".play"), bar = box.querySelector(".prog i"), tm = box.querySelector(".tm");
+
+  let startedAt = 0, playing = false;
+  btn.addEventListener("click", () => {
+    if (playing) { stopAudio(); btn.textContent = "▶"; playing = false; return; }
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const buf = audioCtx.createBuffer(fmt.channels, N, fmt.rate);
+    for (let c = 0; c < fmt.channels; c++)
+      buf.getChannelData(c).set(planar.subarray(c * N, (c + 1) * N));
+    stopAudio();
+    audioSrc = audioCtx.createBufferSource();
+    audioSrc.buffer = buf;
+    audioSrc.connect(audioCtx.destination);
+    audioSrc.onended = () => { btn.textContent = "▶"; playing = false; bar.style.width = "0%"; clearInterval(audioTimer); };
+    startedAt = audioCtx.currentTime;
+    audioSrc.start();
+    playing = true;
+    btn.textContent = "■";
+    audioTimer = setInterval(() => {
+      const t = Math.min(dur, audioCtx.currentTime - startedAt);
+      bar.style.width = (t / dur) * 100 + "%";
+      tm.textContent = `${fmtTime(t)} / ${fmtTime(dur)}`;
+    }, 100);
+  });
+  pane.appendChild(box);
+  return pane;
+}
+function fmtTime(s) {
+  s = Math.max(0, Math.round(s));
+  return `${(s / 60) | 0}:${String(s % 60).padStart(2, "0")}`;
+}
+
+// ---- drawer ---------------------------------------------------
+function renderEntryList() {
+  const ul = $("entries");
+  ul.innerHTML = "";
+  cart.entries.forEach((e, i) => {
+    const li = document.createElement("li");
+    if (i === selected) li.className = "sel";
+    const b = document.createElement("button");
+    b.innerHTML =
+      `<span class="k">${esc(kindOf(e.mimetype))}</span>` +
+      `<span class="n">${esc(e.name || e.mimetype || "entry " + i)}</span>` +
+      `<span class="s">${fmtSize(e.data.length)}</span>`;
+    b.addEventListener("click", () => { showEntry(i); toggleDrawer(false); });
+    li.appendChild(b);
+    ul.appendChild(li);
+  });
+}
+function renderMeta() {
+  const o = cart.opts;
+  $("slotmeta").textContent = `slot ${slot}`;
+  $("cartmeta").innerHTML =
+    `<b>${esc(cart.name)}</b> · ${cart.W}×${cart.H} · ` +
+    `${esc(o.combine)} / ${esc(o.keyMap)} / ${esc(o.traversal)} · ` +
+    `${cart.entries.length} ${cart.entries.length === 1 ? "entry" : "entries"}`;
+  $("cachenote").innerHTML = cart.cached
+    ? `cached in this browser under slot “${esc(slot)}” — reopen this page and it boots straight in. ` +
+      `hard reset: eject above, or add <b>?reset</b> to the URL.`
+    : `<span class="warn">not cached</span> — cartridge too large for localStorage; it will not survive a reload.`;
+}
+function toggleDrawer(force) {
+  drawerEl.classList.toggle("open", force);
+  document.body.classList.toggle("dopen", drawerEl.classList.contains("open"));
+}
+
+// ---- boot -----------------------------------------------------
+async function boot(name, bytes, { cache }) {
+  const { entries, opts, W, H } = await decodeBytes(bytes); // throws if not STGC
+  const cached = cache ? saveSlot(name, bytes) : true;
+  cart = { name, bytes, entries, opts, W, H, cached };
+  loaderEl.style.display = "none";
+  stageEl.classList.add("on");
+  pillEl.classList.add("on");
+  renderMeta();
+  // default view: first html entry, else first entry
+  const first = entries.findIndex((e) => kindOf(e.mimetype) === "html");
+  showEntry(first >= 0 ? first : 0);
+  toggleDrawer(false);
+}
+
+async function loadFile(file) {
+  $("loaderr").textContent = "";
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await boot(file.name, bytes, { cache: true });
+  } catch (err) {
+    $("loaderr").textContent = "✗ " + err.message;
+  }
+}
+
+// loader wiring
+$("file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+$("file2").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+const drop = $("drop");
+["dragover", "dragenter"].forEach((t) =>
+  document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) =>
+  document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+document.addEventListener("drop", (e) => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+
+// console wiring
+pillEl.addEventListener("click", () => toggleDrawer(!drawerEl.classList.contains("open")));
+$("closedrawer").addEventListener("click", () => toggleDrawer(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && cart) toggleDrawer(!drawerEl.classList.contains("open"));
+});
+$("eject").addEventListener("click", () => {
+  clearSlot();
+  clearStage();
+  cart = null;
+  selected = -1;
+  stageEl.classList.remove("on");
+  pillEl.classList.remove("on");
+  toggleDrawer(false);
+  loaderEl.style.display = "";
+});
+
+// startup: ?src=url wins, then the cached slot, else the loader
+(async () => {
+  const src = qs.get("src");
+  if (src) {
+    try {
+      const r = await fetch(src);
+      if (!r.ok) throw new Error(`fetch failed: ${r.status}`);
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      await boot(src.split("/").pop() || "cartridge.png", bytes, { cache: true });
+      return;
+    } catch (err) {
+      $("loaderr").textContent = "✗ " + err.message;
+    }
+  }
+  const saved = readSlot();
+  if (saved) {
+    try {
+      await boot(saved.name, saved.bytes, { cache: false });
+    } catch (err) {
+      clearSlot(); // stale/corrupt cache — fall back to the loader
+      $("loaderr").textContent = "✗ cached cartridge failed to decode; slot cleared";
+    }
+  }
+})();
+</script>
+</body>
+</html>
