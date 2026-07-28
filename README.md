@@ -1,7 +1,7 @@
 # stega-now
 
-Playback for [stegassette](../_labs/stegassette) STGC cartridge PNGs. Static —
-`index.html` + `lib/steg-core.js`, serve anywhere.
+Playback for stegassette STGC cartridge PNGs. Static — `index.html` +
+`lib/steg-core.js`, serve anywhere.
 
 Add a cartridge and stega-now decodes it in the browser and plays back
 whatever it holds:
@@ -15,8 +15,9 @@ whatever it holds:
 | `audio/*`      | `<audio>` element (loopable)               |
 | anything else  | download link                              |
 
-A cartridge with an HTML entry boots that entry; a bar with the entry list
-appears only when there is more than one.
+A cartridge with an HTML entry boots that entry. While playing, a slim bar
+shows the cartridge name and an eject button; entry buttons join it when the
+cartridge holds more than one entry.
 
 ## Library
 
