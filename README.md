@@ -1,7 +1,7 @@
-# stegassette console
+# stega-now
 
 A static, public-facing player for [stegassette](../\_labs/stegassette) STGC
-cartridges. Load a cartridge PNG and the console decodes it in the browser and
+cartridges. Load a cartridge PNG and stega-now decodes it in the browser and
 plays back whatever it holds:
 
 | entry mimetype | playback                                     |
@@ -42,9 +42,14 @@ It's all static — serve the repo root anywhere (GitHub Pages, Netlify, an S3
 bucket). `index.html` + `lib/steg-core.js` are the only files the player needs;
 `out/` holds encoded cartridges you want to link with `?src=`.
 
-Note: an HTML cartridge executes with this origin's privileges (that is the
-point — cartridges are apps, and their own localStorage keys live on this
-origin too). Only host cartridges you trust.
+HTML cartridges run in a **sandboxed iframe** (`sandbox="allow-scripts
+allow-forms allow-modals allow-downloads"`) — an opaque origin, so a cartridge
+can't touch this site's storage, cookies, or DOM, or another cartridge's data.
+Because the sandbox also blocks the cartridge's own `localStorage`, the player
+injects a synchronous shim seeded from the slot's saved app data; writes post
+back to the parent and persist under `stega-now:<slot>:app`. Cartridge apps
+that use plain `localStorage` (like sydney-protocol) keep working, isolated
+per slot. Eject / `?reset` clears the app data along with the cartridge.
 
 ## Encoding a cartridge
 

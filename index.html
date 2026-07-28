@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>stegassette console</title>
+<title>stega-now</title>
 <style>
 :root{
   --bg:#0b0c10;
@@ -125,7 +125,7 @@ body.dopen #pill{display:none}
 <body>
 
 <div id="loader">
-  <div class="logo">stegassette <b>console</b></div>
+  <div class="logo">stega<b>-now</b></div>
   <label id="drop">
     drop a cartridge PNG<br>or click to choose a file
     <input type="file" id="file" accept="image/png,image/*">
@@ -139,7 +139,7 @@ body.dopen #pill{display:none}
 <button id="pill" title="console (Esc)">▤</button>
 <div id="drawer">
   <div class="hd">
-    <span class="t">stegassette <b>console</b></span>
+    <span class="t">stega<b>-now</b></span>
     <span class="meta" id="slotmeta"></span>
     <button class="x" id="closedrawer" title="close">✕</button>
   </div>
@@ -156,7 +156,7 @@ body.dopen #pill{display:none}
 <script>
 "use strict";
 /* ============================================================
-   stegassette console — loads a STGC cartridge PNG, decodes its
+   stega-now — loads a STGC cartridge PNG, decodes its
    entries with steg-core, and plays back whatever it holds:
      text/html  → full-screen app (srcdoc iframe)
      text/*     → text pane
@@ -173,10 +173,10 @@ body.dopen #pill{display:none}
 
 const qs = new URLSearchParams(location.search);
 const slot = (qs.get("local") || "default").replace(/[^\w.-]/g, "") || "default";
-const LSKEY = "stegassette-console:" + slot;
+const LSKEY = "stega-now:" + slot;
 
 if (qs.has("reset")) {
-  try { localStorage.removeItem(LSKEY); } catch (_) {}
+  try { localStorage.removeItem(LSKEY); localStorage.removeItem(LSKEY + ":app"); } catch (_) {}
   qs.delete("reset");
   history.replaceState(null, "", location.pathname + (qs.toString() ? "?" + qs.toString() : ""));
 }
@@ -222,8 +222,52 @@ function readSlot() {
   }
 }
 function clearSlot() {
-  try { localStorage.removeItem(LSKEY); } catch (_) {}
+  try { localStorage.removeItem(LSKEY); localStorage.removeItem(LSKEY + ":app"); } catch (_) {}
 }
+
+// ---- cartridge sandbox + storage bridge -----------------------
+// html entries run in a sandboxed iframe (opaque origin) so a cartridge can
+// never touch this site's storage, cookies, or DOM — or another cartridge's
+// data. The sandbox also blocks the cartridge's own localStorage, so we
+// inject a synchronous in-memory shim seeded from this slot's saved app
+// data; the shim posts writes back here, persisted under "<slot>:app".
+// Protection and persistence at the same time.
+const APPKEY = LSKEY + ":app";
+function readAppStore() {
+  try { return JSON.parse(localStorage.getItem(APPKEY)) || {}; } catch (_) { return {}; }
+}
+function saveAppStore(data) {
+  try { localStorage.setItem(APPKEY, JSON.stringify(data)); } catch (_) {}
+}
+function shimHtml(html) {
+  const seed = JSON.stringify(readAppStore()).replace(/</g, "\\u003c");
+  const shim =
+    "<script>(function(){" +
+    "var data=" + seed + ";" +
+    'function sync(){try{parent.postMessage({stegaNow:"store",data:data},"*")}catch(_){}}' +
+    "var shim={getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(data,k)?data[k]:null}," +
+    "setItem:function(k,v){data[String(k)]=String(v);sync()}," +
+    "removeItem:function(k){delete data[String(k)];sync()}," +
+    "clear:function(){data={};sync()}," +
+    "key:function(i){var ks=Object.keys(data);return i in ks?ks[i]:null}};" +
+    'Object.defineProperty(shim,"length",{get:function(){return Object.keys(data).length}});' +
+    "try{window.localStorage.getItem}catch(_){" +
+    'try{Object.defineProperty(window,"localStorage",{configurable:true,get:function(){return shim}})}catch(_){}}' +
+    "})()<\/script>";
+  // inject after <head>/<html>/doctype — a script placed before <!DOCTYPE>
+  // would flip the cartridge document into quirks mode
+  const m = html.match(/<head[^>]*>/i) || html.match(/<html[^>]*>/i) || html.match(/<!doctype[^>]*>/i);
+  if (m) {
+    const at = m.index + m[0].length;
+    return html.slice(0, at) + shim + html.slice(at);
+  }
+  return shim + html;
+}
+let appFrame = null; // contentWindow of the active html cartridge
+window.addEventListener("message", (e) => {
+  if (appFrame && e.source === appFrame && e.data && e.data.stegaNow === "store")
+    saveAppStore(e.data.data || {});
+});
 
 // ---- decode ---------------------------------------------------
 async function decodeBytes(bytes) {
@@ -269,6 +313,7 @@ function stopAudio() {
 }
 function clearStage() {
   stopAudio();
+  appFrame = null;
   for (const u of blobUrls.splice(0)) URL.revokeObjectURL(u);
   stageEl.innerHTML = "";
 }
@@ -282,9 +327,11 @@ function showEntry(i) {
 
   if (kind === "html") {
     const iframe = document.createElement("iframe");
+    iframe.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-downloads");
     iframe.allow = "fullscreen";
-    iframe.srcdoc = new TextDecoder().decode(e.data);
+    iframe.srcdoc = shimHtml(new TextDecoder().decode(e.data));
     stageEl.appendChild(iframe);
+    appFrame = iframe.contentWindow;
   } else if (kind === "text") {
     const pane = document.createElement("div");
     pane.className = "pane text";
@@ -405,6 +452,7 @@ function renderMeta() {
     `${cart.entries.length} ${cart.entries.length === 1 ? "entry" : "entries"}`;
   $("cachenote").innerHTML = cart.cached
     ? `cached in this browser under slot “${esc(slot)}” — reopen this page and it boots straight in. ` +
+      `cartridges run sandboxed; anything they save lives in this slot too. ` +
       `hard reset: eject above, or add <b>?reset</b> to the URL.`
     : `<span class="warn">not cached</span> — cartridge too large for localStorage; it will not survive a reload.`;
 }
