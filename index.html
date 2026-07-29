@@ -330,6 +330,11 @@
         try {
           await libDel(id);
         } catch (_) {}
+        const url = thumbUrls.get(id);
+        if (url) {
+          URL.revokeObjectURL(url);
+          thumbUrls.delete(id);
+        }
         // drop it from any group it belonged to; empty groups go away
         try {
           for (const g of await grpAll()) {
@@ -1249,14 +1254,25 @@
       }
 
       // ---- library ------------------------------------------------
-      const gridUrls = [];
+      // One object URL per cartridge, kept for as long as the cartridge
+      // exists. Minting fresh ones per render made every thumbnail decode
+      // again, so the library blinked on each re-render.
+      const thumbUrls = new Map();
       function thumbOf(rec) {
+        let url = thumbUrls.get(rec.id);
+        if (!url) {
+          url = URL.createObjectURL(rec.blob);
+          thumbUrls.set(rec.id, url);
+        }
         const img = document.createElement("img");
-        const url = URL.createObjectURL(rec.blob);
-        gridUrls.push(url);
         img.src = url;
         img.alt = rec.name;
         return img;
+      }
+      function updateGroupBtn() {
+        $("group").textContent =
+          "group" + (picked.size ? " (" + picked.size + ")" : "");
+        $("group").disabled = picked.size < 2;
       }
       // click plays, a 650ms hold deletes — shared by cart and group tiles
       function holdable(el, onHold, onClick) {
@@ -1283,7 +1299,6 @@
 
       async function renderGrid() {
         const grid = $("grid");
-        for (const u of gridUrls.splice(0)) URL.revokeObjectURL(u);
         grid.innerHTML = "";
         const [lib, groups] = await Promise.all([libAll(), grpAll()]);
         const byId = new Map(lib.map((r) => [r.id, r]));
@@ -1293,10 +1308,8 @@
         $("select").hidden = lib.length - grouped.size < 2;
         $("select").textContent = selecting ? "done" : "select";
         $("group").hidden = !selecting;
-        $("group").textContent =
-          "group" + (picked.size ? " (" + picked.size + ")" : "");
-        $("group").disabled = picked.size < 2;
         $("cancel").hidden = !selecting;
+        updateGroupBtn();
 
         // groups first — each previews its members in order
         for (const g of groups) {
@@ -1343,12 +1356,9 @@
           if (grouped.has(rec.id)) continue;
           const b = document.createElement("button");
           b.className = "cart" + (picked.has(rec.id) ? " sel" : "");
-          b.appendChild(thumbOf(rec));
-          b.appendChild(
-            document.createTextNode(
-              (picked.has(rec.id) ? "✓ " : "") + rec.name,
-            ),
-          );
+          const label = document.createElement("span");
+          label.textContent = (picked.has(rec.id) ? "✓ " : "") + rec.name;
+          b.append(thumbOf(rec), label);
           holdable(
             b,
             () => {
@@ -1358,8 +1368,13 @@
             () => {
               $("err").textContent = "";
               if (!selecting) return play(rec);
-              picked.has(rec.id) ? picked.delete(rec.id) : picked.add(rec.id);
-              renderGrid();
+              // tick this tile in place — re-rendering the whole grid per
+              // click is what made the thumbnails flicker
+              const on = picked.has(rec.id);
+              on ? picked.delete(rec.id) : picked.add(rec.id);
+              b.classList.toggle("sel", !on);
+              label.textContent = (on ? "" : "✓ ") + rec.name;
+              updateGroupBtn();
             },
           );
           grid.appendChild(b);
