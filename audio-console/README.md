@@ -13,9 +13,13 @@ An album is a folder of PNGs:
                             track, part, of, iv) and that part's encrypted PCM.
 ```
 
-A track's PCM is a single byte stream cut into as many parts as you ask for,
-so one song can span one image or twelve. Concatenating the parts in order
-restores the stream exactly — verified bit-exact against the source PCM.
+A track is cut into as many parts as you ask for, so one song can span one
+image or twelve. The cut is by **frames**, and each part is laid out on its
+own, so every image holds a whole self-contained segment — all channels, no
+half samples. One image is playable by itself rather than holding, say, only
+the left channel's first half, under either channel layout. Laying the parts
+end to end restores the track exactly; both properties are verified bit-exact
+against the source PCM.
 
 ## Build
 
@@ -43,6 +47,10 @@ the record hits the target and the tracks keep their relative loudness;
 `track` brings every track to the same peak; `off` leaves levels alone.
 Default is album at −1 dBFS.
 
+**Layout** — `planar` keeps a channel contiguous inside each image,
+`interleaved` sits the channels side by side. Either way a part carries whole
+frames, so either is playable on its own.
+
 Audio is decoded by the browser, so anything it can play is valid input. The
 artwork keeps its own resolution whenever it has room for the payload; it is
 only enlarged when the payload needs more pixels. More images per track means
@@ -64,12 +72,21 @@ a track list with the parts it found. Click a track to decrypt and play it;
 the album then plays through. Lyrics scroll inline, the current line lit from
 the playhead.
 
+Images play **in sequence as they load**. The first one starts as soon as it is
+decrypted and the rest are queued onto the audio clock while it plays, so a
+track spanning twelve images begins as quickly as one instead of decrypting
+all twelve up front — time to first sound doesn't grow with the length of the
+song. Each start time is computed from the part's own position, so the joins
+are sample-accurate; if an image ever misses its slot the player skips into it
+by however late it is rather than letting the audio drift behind the playhead.
+
 Every image in the album is on the shelf at the bottom, and the one being read
-right now is lit. Above it, that image **develops as it decodes** — the
-encoded picture is cleared away in the cartridge's own traversal order,
-exposing the artwork underneath, in step with the audio coming out of it.
-Because tracks are stored interleaved, each image holds a contiguous stretch
-of time, so image 2 of 3 develops during its own third of the song.
+right now is lit. One image per track packs into a single row; several images
+per track get a row each, with the title beside it. Above the shelf, the
+current image **develops as it decodes** — the encoded picture is cleared away
+in the cartridge's own traversal order, exposing the artwork underneath, in
+step with the audio coming out of it. Since each part holds a contiguous
+stretch of time, image 2 of 3 develops during its own third of the song.
 
 Drag the seek bar to move through a track. The playhead lands wherever you
 put it, the images re-develop from that point, and the lyrics follow. Stopping

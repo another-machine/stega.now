@@ -149,6 +149,28 @@
       .shelf figcaption {
         font-size: 9px;
         opacity: 0.5;
+        max-width: 56px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* several images per track: title beside the row, not above it */
+      .trackline {
+        display: grid;
+        grid-template-columns: minmax(0, max-content) 1fr;
+        gap: 8px;
+        align-items: start;
+        margin: 2px 0;
+      }
+      .trackline .lbl {
+        padding-top: 3px;
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .trackline .shelf {
+        margin: 0;
       }
       /* the reveal: encoded on top, reconstruction underneath */
       .rev {
@@ -235,6 +257,11 @@
             <select id="aCh">
               <option>1</option>
               <option selected>2</option>
+            </select>
+            <span>layout</span>
+            <select id="aLayout" title="how a part's channels sit inside its own image">
+              <option selected>planar</option>
+              <option>interleaved</option>
             </select>
             <span>images per track</span>
             <input
@@ -574,6 +601,7 @@
               rate: +$("aRate").value,
               bits: +$("aBits").value,
               channels: +$("aCh").value,
+              layout: $("aLayout").value,
             },
             partsPerTrack: +$("aParts").value,
             steg: stegChoice(),
@@ -611,20 +639,21 @@
       let loaded = null,
         albumKey = null;
       let actx = null,
-        src = null,
-        timer = null;
-      let np = null; // { n, track, dur, spans, base, startedAt, stopped }
-      const buffers = new Map(); // track n → AudioBuffer
+        timer = null,
+        playGen = 0;
+      let np = null; // the playing track: position, spans, queued sources
+      const partBufs = new Map(); // "track:part" → AudioBuffer
       const revs = new Map(); // "track:part" → reveal
       const shelfUrls = [];
       let shownKey = null,
         revLoading = false,
-        dragging = false;
+        dragging = false,
+        revGen = 0;
 
       async function takePlayFiles(files) {
         stop();
         $("pprog2").classList.remove("hide");
-        buffers.clear();
+        partBufs.clear();
         revs.clear();
         shownKey = null;
         np = null;
@@ -704,42 +733,76 @@
         renderShelves();
       }
 
-      // every image in the album, cover first, grouped by track
+      // Every image in the album. One image per track packs into a single
+      // wrapping row — a row each would be tall and mostly empty. Several
+      // images per track keeps a row per track, since the row is the song's
+      // images in order, with the title beside it rather than above.
       function renderShelves() {
         const box = $("shelves");
         box.innerHTML = "";
-        const thumb = (blob, cap, key) => {
+        const thumb = (blob, cap, key, title) => {
           const fig = document.createElement("figure");
           if (key) fig.dataset.key = key;
           const img = document.createElement("img");
           const u = URL.createObjectURL(blob);
           shelfUrls.push(u);
           img.src = u;
-          img.alt = cap;
+          img.alt = title || cap;
+          img.title = title || cap;
           const c = document.createElement("figcaption");
           c.textContent = cap;
           fig.append(img, c);
           return fig;
         };
-        if (loaded.coverBlob) {
+        const rows = loaded.cover.tracks
+          .map((t) => ({
+            t,
+            parts: Album.trackParts(loaded.cover, loaded.parts, t.n).parts,
+          }))
+          .filter((r) => r.parts.length);
+        const most = Math.max(1, ...rows.map((r) => r.parts.length));
+
+        if (most === 1) {
           const shelf = document.createElement("div");
           shelf.className = "shelf";
-          shelf.appendChild(thumb(loaded.coverBlob, "cover", null));
-          box.appendChild(shelf);
-        }
-        for (const t of loaded.cover.tracks) {
-          const { parts } = Album.trackParts(loaded.cover, loaded.parts, t.n);
-          if (!parts.length) continue;
-          const line = document.createElement("div");
-          line.textContent = t.n + " " + t.title;
-          const shelf = document.createElement("div");
-          shelf.className = "shelf";
-          for (const p of parts)
+          if (loaded.coverBlob)
+            shelf.appendChild(thumb(loaded.coverBlob, "cover", null));
+          for (const { t, parts } of rows)
             shelf.appendChild(
-              thumb(p.blob, "p" + p.part, t.n + ":" + p.part),
+              thumb(
+                parts[0].blob,
+                t.n + " " + t.title,
+                t.n + ":" + parts[0].part,
+                t.title,
+              ),
             );
-          box.append(line, shelf);
+          box.appendChild(shelf);
+          markShelf();
+          return;
         }
+
+        const line = (label, figs) => {
+          const row = document.createElement("div");
+          row.className = "trackline";
+          const l = document.createElement("div");
+          l.className = "lbl";
+          l.textContent = label;
+          l.title = label;
+          const shelf = document.createElement("div");
+          shelf.className = "shelf";
+          for (const f of figs) shelf.appendChild(f);
+          row.append(l, shelf);
+          box.appendChild(row);
+        };
+        if (loaded.coverBlob)
+          line("cover", [thumb(loaded.coverBlob, "", null, "cover")]);
+        for (const { t, parts } of rows)
+          line(
+            t.n + " " + t.title,
+            parts.map((p) =>
+              thumb(p.blob, "p" + p.part, t.n + ":" + p.part, t.title),
+            ),
+          );
         markShelf();
       }
       function markShelf() {
@@ -750,17 +813,40 @@
 
       // ---- the reveal for one part -------------------------------
       // Built on demand from the part's file: holding every cartridge's
-      // pixels at once would be hundreds of MB on a real album.
+      // pixels at once would be hundreds of MB on a real album. The decode
+      // opts and payload position came from the read pass, so this only
+      // pays for the PNG decode and the reconstruction.
+      const REV_CACHE = 8;
       async function revealFor(part) {
         const key = part.track + ":" + part.part;
         if (revs.has(key)) return revs.get(key);
         const img = await Album.imgFromBlob(part.blob);
-        const { entries, opts } = StegCore.decodeContainer(img, img);
-        const payload = entries.find((e) => e.name !== Album.PART_ENTRY);
-        const rev = Reveal.build(img, opts, payload);
+        let opts = part.opts,
+          entry = part.payloadAt;
+        if (!opts || !entry) {
+          const d = StegCore.decodeContainer(img, img);
+          opts = d.opts;
+          entry = d.entries.find((e) => e.name !== Album.PART_ENTRY);
+        }
+        const rev = Reveal.build(img, opts, entry);
+        rev.gen = revGen;
         revs.set(key, rev);
-        for (const k of [...revs.keys()])
-          if (revs.size > 3 && k !== key && k !== shownKey) revs.delete(k);
+        // keep a handful around so small scrubs don't rebuild anything
+        for (const k of [...revs.keys()]) {
+          if (revs.size <= REV_CACHE) break;
+          if (k !== key && k !== shownKey) revs.delete(k);
+        }
+        return rev;
+      }
+      // A reveal only ever adds pixels, so a jump backwards needs it wound
+      // back. Bumping a counter defers that to whichever image is actually
+      // shown next, instead of re-drawing every cached one on every scrub.
+      function currentRev(part) {
+        const rev = revs.get(part.track + ":" + part.part);
+        if (rev && rev.gen !== revGen) {
+          rev.reset();
+          rev.gen = revGen;
+        }
         return rev;
       }
       function showPart(span) {
@@ -771,14 +857,16 @@
           .then((rev) => {
             revLoading = false;
             shownKey = key;
-            $("revBox").innerHTML = "";
-            $("revBox").appendChild(rev.el);
+            // swap only once the new image is ready, so the previous one
+            // stays put rather than the panel blanking mid-scrub
+            $("revBox").replaceChildren(rev.el);
             $("revLabel").textContent =
               `image ${span.ref.part}/${span.ref.of} · ` +
               `${Album.fmtTime(span.start)}–${Album.fmtTime(span.end)} · developing as it decodes`;
             markShelf();
-            const next = np && np.spans[span.part]; // 0-based next
-            if (next) revealFor(next.ref).catch(() => {});
+            // neighbours, so playing on or nudging back is instant
+            for (const i of [span.part, span.part - 2])
+              if (np && np.spans[i]) revealFor(np.spans[i].ref).catch(() => {});
           })
           .catch((err) => {
             revLoading = false;
@@ -793,12 +881,11 @@
         if (np) {
           np.base = now();
           np.playing = false;
-        }
-        if (src) {
-          try {
-            src.stop();
-          } catch (_) {}
-          src = null;
+          for (const s of np.sources.splice(0)) {
+            try {
+              s.stop();
+            } catch (_) {}
+          }
         }
         if (timer) {
           clearInterval(timer);
@@ -806,91 +893,158 @@
         }
         $("pplay").textContent = "play";
       }
+      const isPlaying = () => !!(np && np.playing);
       function resetReveals() {
-        for (const r of revs.values()) r.reset();
-        shownKey = null;
-        $("revBox").innerHTML = "";
+        revGen++; // cached images wind back when they are next shown
+      }
+      function ensureCtx() {
+        actx =
+          actx || new (window.AudioContext || window.webkitAudioContext)();
+        return actx;
       }
 
-      async function trackBuffer(n) {
-        if (buffers.has(n)) return buffers.get(n);
-        const { track, parts, missing } = Album.trackParts(loaded.cover, loaded.parts, n);
-        if (!track || missing.length)
-          throw new Error("track " + n + " is missing parts " + missing.join(","));
-        $("pstatus").textContent = "decrypting " + track.title + "…";
-        const { channels, frames, rate } = await Album.assemble(
+      // One image, decrypted into its own buffer. Each part is a whole
+      // segment of the song, so nothing waits on the rest of the track.
+      async function partBuffer(n, part) {
+        const k = n + ":" + part.part;
+        if (partBufs.has(k)) return partBufs.get(k);
+        const { channels, frames, rate } = await Album.decodePart(
           loaded.cover,
           albumKey,
-          parts,
+          part,
         );
-        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-        const buf = actx.createBuffer(channels.length, frames, rate);
+        const buf = ensureCtx().createBuffer(channels.length, frames, rate);
         for (let c = 0; c < channels.length; c++)
           buf.getChannelData(c).set(channels[c]);
-        buffers.set(n, buf);
-        $("pstatus").textContent = "";
+        partBufs.set(k, buf);
         return buf;
       }
 
-      async function playTrack(n, offset = 0) {
-        stop();
-        let buf;
+      // Play the images in sequence as they load: the first one starts as
+      // soon as it is decrypted, and the rest are queued onto the audio
+      // clock while it plays. A track spanning twelve images begins as
+      // quickly as one, instead of decrypting all twelve up front, and the
+      // joins stay sample-accurate because each start time is computed from
+      // the part's own position in the song.
+      const LEAD = 4; // seconds of audio kept scheduled ahead
+      let pumping = false;
+      async function pump() {
+        if (pumping || !isPlaying()) return;
+        pumping = true;
         try {
-          buf = await trackBuffer(n);
-        } catch (err) {
-          $("pstatus").textContent = "✗ " + err.message;
+          while (
+            isPlaying() &&
+            np.nextIdx < np.spans.length &&
+            np.scheduledTo - now() < LEAD
+          ) {
+            const gen = np.gen;
+            const span = np.spans[np.nextIdx];
+            const first = !np.sources.length;
+            if (first)
+              $("pstatus").textContent =
+                "decrypting image " + span.ref.part + "/" + span.ref.of + "…";
+            let buf;
+            try {
+              buf = await partBuffer(np.n, span.ref);
+            } catch (err) {
+              $("pstatus").textContent = "✗ " + err.message;
+              np.nextIdx++;
+              continue;
+            }
+            if (!isPlaying() || np.gen !== gen) return; // seek or new track
+            np.nextIdx++;
+            // the clock starts when the first image is actually ready, so
+            // the playhead can't run ahead of what is being heard
+            if (first) np.startedAt = actx.currentTime + 0.06;
+            const from = Math.max(span.start, np.base); // in track time
+            let within = from - span.start; // into this image
+            const when = np.startedAt + (from - np.base); // in context time
+            // If decrypting fell behind the schedule, skip into the image by
+            // however late we are rather than playing it from its start —
+            // otherwise the audio would drift behind the playhead.
+            let at = when;
+            if (when < actx.currentTime) {
+              within += actx.currentTime - when;
+              at = actx.currentTime;
+              np.late++;
+            }
+            if (within < buf.duration - 0.001) {
+              const s = actx.createBufferSource();
+              s.buffer = buf;
+              s.connect(actx.destination);
+              s.start(at, within);
+              np.sources.push(s);
+            }
+            np.scheduledTo = span.end;
+            $("pstatus").textContent = "";
+          }
+        } finally {
+          pumping = false;
+        }
+      }
+
+      async function playTrack(n, offset = 0) {
+        const track = loaded.cover.tracks.find((t) => t.n === n);
+        const { parts, missing } = Album.trackParts(loaded.cover, loaded.parts, n);
+        if (!track || !parts.length || missing.length) {
+          $("pstatus").textContent =
+            "✗ track " + n + " is missing image(s) " + missing.join(",");
           return;
         }
-        const track = loaded.cover.tracks.find((t) => t.n === n);
-        const { parts } = Album.trackParts(loaded.cover, loaded.parts, n);
         const spans = Album.partSpans(loaded.cover, parts);
-        if (!np || np.n !== n) renderLyrics(track);
-        // a seek can land anywhere, so the images start over from encoded
-        resetReveals();
-
-        const mine = actx.createBufferSource();
-        mine.buffer = buf;
-        mine.connect(actx.destination);
-        mine.onended = () => {
-          if (mine !== src) return; // superseded by a seek or another track
-          const next = loaded.cover.tracks.find((t) => t.n === n + 1);
-          const { missing } = next
-            ? Album.trackParts(loaded.cover, loaded.parts, next.n)
-            : { missing: [1] };
-          np.base = np.dur; // finished, so the playhead sits at the end
-          np.playing = false;
-          stop();
-          if (next && !missing.length) playTrack(next.n, 0);
-        };
-        src = mine;
+        const dur = spans[spans.length - 1].end;
+        const wasTrack = np && np.n;
+        stop();
+        if (wasTrack !== n) renderLyrics(track);
+        resetReveals(); // a seek can land anywhere, so images start over
+        ensureCtx();
         np = {
           n,
           track,
           spans,
-          dur: buf.duration,
-          base: Math.max(0, Math.min(offset, buf.duration - 0.01)),
+          dur,
+          base: Math.max(0, Math.min(offset, Math.max(0, dur - 0.01))),
           startedAt: actx.currentTime,
           playing: true,
+          sources: [],
+          late: 0, // images that missed their slot (would be heard as a gap)
+          nextIdx: Album.spanAt(spans, Math.min(offset, dur)),
+          scheduledTo: Math.max(0, Math.min(offset, dur)),
+          gen: ++playGen,
         };
-        mine.start(0, np.base);
         $("pplay").disabled = false;
         $("pplay").textContent = "stop";
         $("npTitle").textContent = track.title;
         timer = setInterval(tick, 100);
+        pump();
         tick();
       }
 
       function now() {
         if (!np) return 0;
+        if (!np.playing) return Math.min(np.dur, np.base);
+        // clamped below by base: the first image may not have started yet
         return Math.min(
           np.dur,
-          np.playing ? np.base + (actx.currentTime - np.startedAt) : np.base,
+          Math.max(np.base, np.base + (actx.currentTime - np.startedAt)),
         );
       }
 
       function tick() {
         if (!np) return;
         const t = now();
+        pump(); // keep images queued ahead of the playhead
+        // the track is over once every image has been scheduled and played
+        if (np.playing && np.nextIdx >= np.spans.length && t >= np.dur - 0.02) {
+          const next = loaded.cover.tracks.find((x) => x.n === np.n + 1);
+          const ok =
+            next &&
+            !Album.trackParts(loaded.cover, loaded.parts, next.n).missing.length;
+          np.base = np.dur;
+          stop();
+          if (ok) playTrack(next.n, 0);
+          return;
+        }
         if (!dragging) $("npSeek").value = Math.round((t / np.dur) * 1000);
         $("npTime").textContent =
           Album.fmtTime(t) + " / " + Album.fmtTime(np.dur);
@@ -900,7 +1054,7 @@
         const span = np.spans[i];
         if (span) {
           showPart(span);
-          const rev = revs.get(span.ref.track + ":" + span.ref.part);
+          const rev = currentRev(span.ref);
           if (rev && shownKey === span.ref.track + ":" + span.ref.part)
             rev.seek((t - span.start) / Math.max(0.001, span.end - span.start));
         }
@@ -939,7 +1093,7 @@
 
       // ---- transport --------------------------------------------
       $("pplay").addEventListener("click", () => {
-        if (src) stop(); // stop() remembers where we were
+        if (isPlaying()) stop(); // stop() remembers where we were
         else if (np) playTrack(np.n, np.base < np.dur - 0.02 ? np.base : 0);
       });
       $("npSeek").addEventListener("pointerdown", () => (dragging = true));
@@ -953,7 +1107,7 @@
         dragging = false;
         if (!np) return;
         const t = (+$("npSeek").value / 1000) * np.dur;
-        if (src) playTrack(np.n, t);
+        if (isPlaying()) playTrack(np.n, t);
         else {
           np.base = t;
           resetReveals(); // seeking back re-encodes the images

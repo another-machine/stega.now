@@ -283,9 +283,10 @@ const Album = (() => {
     const keyB64 = newKey();
     const key = await importKey(keyB64);
     const albumId = hex(8);
-    // interleaved so a part's bytes are a contiguous stretch of TIME —
-    // that is what lets the player follow the song from image to image
-    const layout = "interleaved";
+    // Each part carries whole frames in this layout, so either choice leaves
+    // a part playable on its own; planar keeps a channel contiguous within
+    // an image, interleaved keeps the two channels side by side.
+    const layout = audio.layout || "planar";
 
     const files = [];
     const trackMeta = [];
@@ -324,23 +325,29 @@ const Album = (() => {
       else if (normalize.mode === "album" && albumGain !== 1)
         for (const c of channels)
           for (let i = 0; i < c.length; i++) c[i] *= albumGain;
-      const interleavedOrder = StegCore.layoutChannels({
-        mixed: channels,
-        layout,
-      });
-      const pcm = StegCore.float32ToPcm(interleavedOrder, audio.bits);
-
-      // cut the byte stream into parts; concatenating them restores it
+      // Cut by FRAMES, not bytes, and lay out each part on its own: every
+      // image then holds a whole, self-contained segment of the song — all
+      // channels, no half samples — so one image is playable by itself
+      // rather than holding, say, only the left channel's first half.
       const P = Math.max(1, parseInt(partsPerTrack) || 1);
-      const per = Math.ceil(pcm.length / P);
+      const perPart = Math.ceil(frames / P);
+      let pcmBytes = 0;
       for (let p = 0; p < P; p++) {
-        const chunk = pcm.subarray(p * per, Math.min(pcm.length, (p + 1) * per));
-        if (!chunk.length) continue;
+        const f0 = p * perPart,
+          f1 = Math.min(frames, f0 + perPart);
+        if (f1 <= f0) continue;
+        const slice = channels.map((c) => c.subarray(f0, f1));
+        const chunk = StegCore.float32ToPcm(
+          StegCore.layoutChannels({ mixed: slice, layout }),
+          audio.bits,
+        );
+        pcmBytes += chunk.length;
         onProgress(
           `encrypting ${tr.title} part ${p + 1}/${P}`,
           (t + (p + 1) / P / 2) / tracks.length,
         );
         const { iv, data } = await encryptBytes(key, chunk);
+        // self-describing, so a single image can be played on its own
         const partJson = {
           format: FORMAT,
           id: albumId,
@@ -349,6 +356,12 @@ const Album = (() => {
           of: P,
           iv,
           bytes: chunk.length,
+          startFrame: f0,
+          frames: f1 - f0,
+          rate: audio.rate,
+          bits: audio.bits,
+          channels: audio.channels,
+          layout,
         };
         const entries = [
           {
@@ -386,7 +399,7 @@ const Album = (() => {
         n: no,
         title: tr.title,
         parts: Math.max(1, parseInt(partsPerTrack) || 1),
-        bytes: pcm.length,
+        bytes: pcmBytes,
         frames,
         durationMs: Math.round((frames / audio.rate) * 1000),
         lyrics: tr.lyrics || [],
@@ -459,7 +472,7 @@ const Album = (() => {
       onProgress(`reading ${f.name}`, i / files.length);
       try {
         const img = await imgFromBlob(f);
-        const { entries } = StegCore.decodeContainer(img, img);
+        const { entries, opts } = StegCore.decodeContainer(img, img);
         const cj = entries.find((e) => e.name === COVER_ENTRY);
         if (cj) {
           cover = JSON.parse(dec.decode(cj.data));
@@ -472,13 +485,23 @@ const Album = (() => {
         if (pj) {
           const info = JSON.parse(dec.decode(pj.data));
           const payload = entries.find((e) => e.name !== PART_ENTRY);
-          // the file is kept so the reveal can re-read the image later
-          // without holding every cartridge's pixels in memory at once
+          // The file is kept so the reveal can re-read the image later
+          // without holding every cartridge's pixels in memory at once.
+          // The decode opts and the payload's position are kept too, so
+          // building that reveal doesn't have to decode the container again.
           parts.push({
             ...info,
             data: payload ? payload.data : null,
             file: f.name,
             blob: f,
+            opts,
+            payloadAt: payload
+              ? {
+                  dataOffset: payload.dataOffset,
+                  byteLength: payload.data.length,
+                  mimetype: payload.mimetype,
+                }
+              : null,
           });
           continue;
         }
@@ -491,19 +514,20 @@ const Album = (() => {
     return { cover, art, coverBlob, parts, skipped };
   }
 
-  // Where each part sits in the song. Interleaved PCM means a part's bytes
-  // are a contiguous stretch of time, so a part maps to a span of seconds —
-  // which is what lets playback follow the song from image to image.
+  // Where each part sits in the song. A part holds whole frames, so it maps
+  // to a span of seconds — which is what lets playback follow the song from
+  // image to image, whatever the channel layout.
   function partSpans(album, parts) {
-    const bpf = album.audio.channels * (album.audio.bits / 8);
     const rate = album.audio.rate;
-    let off = 0;
+    const bpf = album.audio.channels * (album.audio.bits / 8);
+    let at = 0;
     return [...parts]
       .sort((a, b) => a.part - b.part)
       .map((p) => {
-        const start = off / bpf / rate;
-        off += p.bytes;
-        return { ref: p, part: p.part, start, end: off / bpf / rate };
+        const n = p.frames != null ? p.frames : p.bytes / bpf;
+        const start = (p.startFrame != null ? p.startFrame : at) / rate;
+        at += n;
+        return { ref: p, part: p.part, start, end: start + n / rate };
       });
   }
   // which span contains `sec`
@@ -525,30 +549,44 @@ const Album = (() => {
     return { track: t, parts: mine, missing };
   }
 
-  // Decrypt + concatenate a track's parts into channel data ready for an
-  // AudioBuffer. Parts are slices of one stream, so the joins are exact.
-  async function assemble(album, key, parts) {
-    const ordered = [...parts].sort((a, b) => a.part - b.part);
-    const total = ordered.reduce((n, p) => n + p.bytes, 0);
-    const pcm = new Uint8Array(total);
-    let off = 0;
-    for (const p of ordered) {
-      const clear = await decryptBytes(key, p.iv, p.data);
-      pcm.set(clear, off);
-      off += clear.length;
-    }
+  // Decrypt one part into its own channel data. Each part is a whole
+  // segment in the album's layout, so this stands alone — one image is
+  // playable without the rest of the track.
+  async function decodePart(album, key, part) {
     const { bits, channels, layout } = album.audio;
+    const clear = await decryptBytes(key, part.iv, part.data);
     const planar = StegCore.unlayoutChannels({
-      f32: StegCore.toFloat32(pcm, bits),
+      f32: StegCore.toFloat32(clear, bits),
       layout,
       channels,
       blockSize: 0,
     });
-    const N = (planar.length / channels) | 0;
+    const n = (planar.length / channels) | 0;
     const out = [];
     for (let c = 0; c < channels; c++)
-      out.push(planar.subarray(c * N, (c + 1) * N));
-    return { channels: out, frames: N, rate: album.audio.rate };
+      out.push(planar.subarray(c * n, (c + 1) * n));
+    return { channels: out, frames: n, rate: album.audio.rate };
+  }
+
+  // Decrypt every part and lay them end to end. Parts are consecutive
+  // segments of the same song, so the joins fall on frame boundaries.
+  async function assemble(album, key, parts) {
+    const ordered = [...parts].sort((a, b) => a.part - b.part);
+    const chunks = [];
+    let total = 0;
+    for (const p of ordered) {
+      const c = await decodePart(album, key, p);
+      chunks.push(c);
+      total += c.frames;
+    }
+    const channels = album.audio.channels;
+    const out = Array.from({ length: channels }, () => new Float32Array(total));
+    let at = 0;
+    for (const c of chunks) {
+      for (let ch = 0; ch < channels; ch++) out[ch].set(c.channels[ch], at);
+      at += c.frames;
+    }
+    return { channels: out, frames: total, rate: album.audio.rate };
   }
 
   // ---- zip (store-only; PNGs are already compressed) ---------
@@ -653,6 +691,7 @@ const Album = (() => {
     read,
     trackParts,
     assemble,
+    decodePart,
     zip,
   };
 })();
