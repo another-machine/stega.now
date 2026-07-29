@@ -208,7 +208,13 @@
         <button id="select" hidden>select</button>
         <button id="group" hidden>group</button>
         <button id="cancel" hidden>cancel</button>
-        <input type="file" id="file" accept="image/png,image/*" hidden />
+        <input
+          type="file"
+          id="file"
+          accept="image/png,image/*"
+          multiple
+          hidden
+        />
       </div>
       <p id="hint" hidden>hold a cartridge down to delete it</p>
       <p id="err"></p>
@@ -423,7 +429,7 @@
       }
 
       // ---- decode -------------------------------------------------
-      async function decodeBytes(bytes) {
+      async function toImg(bytes) {
         const blob = new Blob([bytes], { type: "image/png" });
         let bmp;
         try {
@@ -441,9 +447,18 @@
         ctx.drawImage(bmp, 0, 0);
         bmp.close();
         const px = ctx.getImageData(0, 0, W, H).data;
-        const img = new StegCore.Img(W, H, new Uint8Array(px));
+        return new StegCore.Img(W, H, new Uint8Array(px));
+      }
+      async function decodeBytes(bytes) {
+        const img = await toImg(bytes);
         // the Img is kept so playback can animate the decode (see buildReveal)
         return { ...StegCore.decodeContainer(img, img), img };
+      }
+      // Check a file really is a cartridge without paying for a full decode:
+      // the STGC header lives in the border alpha, so reading it costs
+      // nothing next to walking the whole interior. Throws if it isn't one.
+      async function checkCartridge(bytes) {
+        StegCore.unpackStgcHeaderAlpha(await toImg(bytes));
       }
 
       function kindOf(mimetype) {
@@ -1452,18 +1467,35 @@
         renderGrid();
       });
       $("file").addEventListener("change", async (e) => {
-        const f = e.target.files[0];
-        if (!f) return;
+        const files = [...e.target.files];
         e.target.value = "";
-        $("err").textContent = "";
-        const bytes = new Uint8Array(await f.arrayBuffer());
-        try {
-          await decodeBytes(bytes); // validate before storing
-        } catch (err) {
-          $("err").textContent = "✗ " + f.name + ": " + err.message;
-          return;
+        if (!files.length) return;
+        // name order, counting numerically, so the parts of a split land in
+        // sequence however the file picker handed them over
+        files.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true }),
+        );
+        const added = [],
+          failed = [];
+        for (const f of files) {
+          if (files.length > 1) {
+            $("err").textContent =
+              "adding " + (added.length + failed.length + 1) + "/" + files.length + "…";
+            await new Promise((r) => setTimeout(r, 0)); // let the count paint
+          }
+          try {
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            await checkCartridge(bytes); // reject non-cartridges before storing
+            added.push(await addToLib(f.name, bytes));
+          } catch (err) {
+            failed.push(f.name + ": " + err.message);
+          }
         }
-        play(await addToLib(f.name, bytes));
+        $("err").textContent = failed.length ? "✗ " + failed.join("; ") : "";
+        // one cartridge plays straight away; a batch stays in the library,
+        // ready to be grouped
+        if (added.length === 1 && !failed.length) play(added[0]);
+        else renderGrid();
       });
 
       // ---- startup ------------------------------------------------

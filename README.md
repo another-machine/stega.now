@@ -49,8 +49,9 @@ its parts to play one at a time.
 
 Added cartridges are kept as blobs in IndexedDB. When nothing is playing you
 see the library: the cartridge images themselves. Click one to play it,
-**hold it down to delete it**, `add` to load a new PNG. The playing cartridge
-stays active across reloads until you eject.
+**hold it down to delete it**, `add` to load PNGs — one plays straight away,
+several stay in the library in name order, ready to group. The playing
+cartridge stays active across reloads until you eject.
 
 `?src=<url>` fetches a cartridge PNG (same-origin or CORS), stores it in the
 library, and plays it — a direct link to an app.
