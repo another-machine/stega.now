@@ -10,8 +10,14 @@ An album is a folder of PNGs:
                        per-track lyrics with timestamps, the audio format,
                        and the album key — plus the cover artwork.
 <track>-<part>-<slug>.png   one part of one track: part.json (album id,
-                            track, part, of, iv) and that part's encrypted PCM.
+                            track, part, of, iv) and that part's PCM.
 ```
+
+A track part's audio is **always a raw PCM entry** — `audio/L16; rate=…;
+channels=…` — encrypted or not. Encryption changes the bytes, never the type,
+so any STGC player intrinsically treats a track image as audio with nothing to
+deduce: with the cover it is the music, without it the ciphertext plays as the
+noise it is.
 
 A track is cut into as many parts as you ask for, so one song can span one
 image or twelve. The cut is by **frames**, and each part is laid out on its
@@ -51,10 +57,10 @@ Default is album at −1 dBFS.
 `interleaved` sits the channels side by side. Either way a part carries whole
 frames, so either is playable on its own.
 
-**Encrypt to the cover** — on by default. Turn it off and the parts carry
-plain PCM under a real audio mimetype, so every image plays on its own
-anywhere — including in the plain stega-now player — and the cover becomes
-just metadata, lyrics and artwork.
+**Encrypt to the cover** — on by default: the PCM is AES-GCM'd with the album
+key, so the images are noise until the cover supplies it. Turn it off and the
+same entries carry the audio in the clear, so every image plays as music on
+its own anywhere, and the cover is only metadata, lyrics and artwork.
 
 Audio is decoded by the browser, so anything it can play is valid input. The
 artwork keeps its own resolution whenever it has room for the payload; it is
@@ -105,10 +111,13 @@ own:
 
 - **not encrypted** → the real audio, exactly as it plays with the cover. Only
   the titles, lyrics, ownership and artwork are missing.
-- **encrypted** → there is no key, so what plays is the encrypted bytes read
-  as PCM: white noise, at the right length, images developing as it goes. It
-  is played at a fifth of full scale, since ciphertext is full-scale noise.
-  The music itself stays unreachable.
+- **encrypted** → there is no key, so what plays is the encrypted bytes as the
+  PCM they are declared to be: white noise, at the right length, images
+  developing as it goes. It is played at a fifth of full scale, since
+  ciphertext is full-scale noise. The music itself stays unreachable.
+
+The same holds outside this console — drop a track image into the plain
+stega-now player and it plays it as PCM, music or noise depending.
 
 Missing track parts are named, and a track only offers to play when all of its
 parts are there.

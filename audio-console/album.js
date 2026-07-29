@@ -377,16 +377,15 @@ const Album = (() => {
             data: enc.encode(JSON.stringify(partJson)),
           },
           {
-            // ciphertext gets a binary mimetype so nothing tries to play
-            // it; plain PCM gets the real one so anything can
-            mimetype: encrypt
-              ? "application/octet-stream"
-              : StegCore.buildAudioMime({
-                  bits: audio.bits,
-                  rate: audio.rate,
-                  channels: audio.channels,
-                  layout,
-                }),
+            // Always raw PCM, encrypted or not. A track image is an audio
+            // cartridge wherever it turns up: with the cover it is the
+            // music, without it the ciphertext plays as the noise it is.
+            mimetype: StegCore.buildAudioMime({
+              bits: audio.bits,
+              rate: audio.rate,
+              channels: audio.channels,
+              layout,
+            }),
             name: `t${pad(no, 2)}p${pad(p + 1, 2)}`,
             data,
           },
