@@ -291,12 +291,17 @@
             <span>keymap</span><select id="sKeymap"></select>
             <span>border</span
             ><input id="sBorder" value="0.02" size="6" title="fraction of width, or whole px ≥ 1" />
+            <span>encrypt</span>
+            <label
+              ><input type="checkbox" id="sEncrypt" checked /> to the cover</label
+            >
           </div>
           <div class="dim">
             combine decides how much the payload disturbs the artwork · the
             traversal is the order it fills, and the order it develops in on
             playback
           </div>
+          <div class="dim" id="encryptNote"></div>
         </fieldset>
       </div>
 
@@ -317,7 +322,8 @@
         <input type="file" id="pdir" webkitdirectory hidden />
         <button type="button" id="ppickDir">choose a folder</button>
         <div class="dim">
-          the cover cartridge holds the key — without it the tracks stay locked
+          an encrypted album needs its cover: without it the tracks play as the
+          noise they are on disk. An unencrypted one plays either way.
         </div>
       </div>
       <div class="row">
@@ -451,6 +457,13 @@
         mode: $("sNorm").value,
         db: parseFloat($("sNormDb").value),
       });
+      function encryptNote() {
+        $("encryptNote").textContent = $("sEncrypt").checked
+          ? "the tracks need the cover to play — on their own they are noise"
+          : "the tracks carry plain audio: every image plays on its own, cover or not";
+      }
+      $("sEncrypt").addEventListener("change", encryptNote);
+      encryptNote();
 
       function titleFromName(name) {
         return name
@@ -606,6 +619,7 @@
             partsPerTrack: +$("aParts").value,
             steg: stegChoice(),
             normalize: normChoice(),
+            encrypt: $("sEncrypt").checked,
             onProgress: (msg, p) => {
               $("bstatus").textContent = msg;
               $("bprog").value = p;
@@ -664,20 +678,32 @@
           $("pprog2").value = p;
         });
         $("pprog2").classList.add("hide");
+        // No cover: stand one in from the parts themselves. They describe
+        // their own format, so they can still be grouped and played — the
+        // real audio when the album wasn't encrypted, and the encrypted
+        // bytes read as PCM (noise) when it was.
         if (!loaded.cover) {
-          $("albumView").classList.add("hide");
-          const tracks = new Set(loaded.parts.map((p) => p.track));
-          $("pstatus").textContent = loaded.parts.length
-            ? `locked — ${loaded.parts.length} encrypted part(s) for ${tracks.size} track(s), ` +
-              `but no album cover. The cover holds the key.`
-            : "nothing readable here" +
+          if (!loaded.parts.length) {
+            $("albumView").classList.add("hide");
+            $("pstatus").textContent =
+              "nothing readable here" +
               (loaded.skipped.length ? " — " + loaded.skipped.join("; ") : "");
+            return;
+          }
+          loaded.cover = Album.standaloneAlbum(loaded.parts);
+          renderAlbum();
+          $("pstatus").textContent = loaded.cover.encrypted
+            ? "locked — no cover, so there is no key. What you can play is the " +
+              "encrypted audio itself: noise, at the right length."
+            : "no cover — these images carry plain audio, so they play as they are";
           return;
         }
-        albumKey = await Album.importKey(loaded.cover.key);
+        albumKey = loaded.cover.key ? await Album.importKey(loaded.cover.key) : null;
         renderAlbum();
         $("pstatus").textContent =
-          "unlocked with " + (loaded.cover.album.title || "the cover") +
+          (loaded.cover.encrypted === false
+            ? "loaded " + (loaded.cover.album.title || "the album") + " (not encrypted)"
+            : "unlocked with " + (loaded.cover.album.title || "the cover")) +
           (loaded.skipped.length ? " · skipped: " + loaded.skipped.join("; ") : "");
       }
 
@@ -688,6 +714,10 @@
           const u = URL.createObjectURL(loaded.art);
           shelfUrls.push(u);
           $("art").src = u;
+          $("art").classList.remove("hide");
+        } else {
+          $("art").removeAttribute("src"); // no cover here, so no artwork
+          $("art").classList.add("hide");
         }
         $("albumMeta").innerHTML =
           `<b>${a.album.title || "untitled"}</b>` +
@@ -705,10 +735,18 @@
         ]
           .filter(Boolean)
           .join(" · ");
-        $("methodMeta").textContent = a.steg
-          ? `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keyMap}` +
-            (a.normalize ? ` · normalize: ${a.normalize.mode}` : "")
-          : "";
+        $("methodMeta").textContent = [
+          a.steg && `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keyMap}`,
+          a.normalize && `normalize: ${a.normalize.mode}`,
+          a.encrypted === false
+            ? "not encrypted — the images play on their own"
+            : albumKey
+              ? "encrypted, unlocked by the cover"
+              : "encrypted, locked — playing the ciphertext as noise",
+          a.synthetic && "no cover loaded",
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
         $("trackTable").innerHTML =
           `<tr><th>#</th><th>title</th><th>time</th><th>images</th><th>lyrics</th><th></th></tr>` +
@@ -905,17 +943,23 @@
 
       // One image, decrypted into its own buffer. Each part is a whole
       // segment of the song, so nothing waits on the rest of the track.
+      // Locked audio is full-scale white noise, so it is played well below
+      // the level real audio would be — loud enough to hear what it is.
+      const LOCKED_GAIN = 0.2;
       async function partBuffer(n, part) {
         const k = n + ":" + part.part;
         if (partBufs.has(k)) return partBufs.get(k);
-        const { channels, frames, rate } = await Album.decodePart(
+        const { channels, frames, rate, locked } = await Album.decodePart(
           loaded.cover,
           albumKey,
           part,
         );
         const buf = ensureCtx().createBuffer(channels.length, frames, rate);
-        for (let c = 0; c < channels.length; c++)
-          buf.getChannelData(c).set(channels[c]);
+        for (let c = 0; c < channels.length; c++) {
+          const d = buf.getChannelData(c);
+          d.set(channels[c]);
+          if (locked) for (let i = 0; i < d.length; i++) d[i] *= LOCKED_GAIN;
+        }
         partBufs.set(k, buf);
         return buf;
       }

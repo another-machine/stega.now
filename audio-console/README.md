@@ -51,6 +51,11 @@ Default is album at −1 dBFS.
 `interleaved` sits the channels side by side. Either way a part carries whole
 frames, so either is playable on its own.
 
+**Encrypt to the cover** — on by default. Turn it off and the parts carry
+plain PCM under a real audio mimetype, so every image plays on its own
+anywhere — including in the plain stega-now player — and the cover becomes
+just metadata, lyrics and artwork.
+
 Audio is decoded by the browser, so anything it can play is valid input. The
 artwork keeps its own resolution whenever it has room for the payload; it is
 only enlarged when the payload needs more pixels. More images per track means
@@ -92,9 +97,21 @@ Drag the seek bar to move through a track. The playhead lands wherever you
 put it, the images re-develop from that point, and the lyrics follow. Stopping
 keeps your place.
 
-Without the cover you get **locked** — the parts are present but they are
-AES-GCM ciphertext and there is no key. Missing track parts are named, and a
-track only offers to play when all of its parts are there.
+## Without the cover
+
+The parts describe their own format and position, so images loaded alone are
+still grouped into tracks and played — you get whatever they can give on their
+own:
+
+- **not encrypted** → the real audio, exactly as it plays with the cover. Only
+  the titles, lyrics, ownership and artwork are missing.
+- **encrypted** → there is no key, so what plays is the encrypted bytes read
+  as PCM: white noise, at the right length, images developing as it goes. It
+  is played at a fifth of full scale, since ciphertext is full-scale noise.
+  The music itself stays unreachable.
+
+Missing track parts are named, and a track only offers to play when all of its
+parts are there.
 
 ## On "encryption"
 

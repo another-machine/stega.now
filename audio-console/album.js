@@ -273,6 +273,7 @@ const Album = (() => {
     partsPerTrack = 1,
     steg = {},
     normalize = { mode: "album", db: -1 },
+    encrypt = true,
     onProgress = () => {},
   }) {
     if (!tracks || !tracks.length) throw new Error("no audio tracks");
@@ -280,8 +281,11 @@ const Album = (() => {
     const carrierBlobs = carriers && carriers.length ? carriers : [coverBlob];
     const method = { ...STEG, ...steg };
 
-    const keyB64 = newKey();
-    const key = await importKey(keyB64);
+    // Without encryption the parts carry plain PCM under a real audio
+    // mimetype, so each image plays anywhere — including in the plain
+    // stega-now player — and the cover is only metadata and lyrics.
+    const keyB64 = encrypt ? newKey() : null;
+    const key = encrypt ? await importKey(keyB64) : null;
     const albumId = hex(8);
     // Each part carries whole frames in this layout, so either choice leaves
     // a part playable on its own; planar keeps a channel contiguous within
@@ -343,10 +347,12 @@ const Album = (() => {
         );
         pcmBytes += chunk.length;
         onProgress(
-          `encrypting ${tr.title} part ${p + 1}/${P}`,
+          `${encrypt ? "encrypting" : "packing"} ${tr.title} part ${p + 1}/${P}`,
           (t + (p + 1) / P / 2) / tracks.length,
         );
-        const { iv, data } = await encryptBytes(key, chunk);
+        const { iv, data } = encrypt
+          ? await encryptBytes(key, chunk)
+          : { iv: null, data: chunk };
         // self-describing, so a single image can be played on its own
         const partJson = {
           format: FORMAT,
@@ -355,6 +361,7 @@ const Album = (() => {
           part: p + 1,
           of: P,
           iv,
+          encrypted: !!encrypt,
           bytes: chunk.length,
           startFrame: f0,
           frames: f1 - f0,
@@ -370,8 +377,16 @@ const Album = (() => {
             data: enc.encode(JSON.stringify(partJson)),
           },
           {
-            // encrypted, so not a playable audio mimetype on purpose
-            mimetype: "application/octet-stream",
+            // ciphertext gets a binary mimetype so nothing tries to play
+            // it; plain PCM gets the real one so anything can
+            mimetype: encrypt
+              ? "application/octet-stream"
+              : StegCore.buildAudioMime({
+                  bits: audio.bits,
+                  rate: audio.rate,
+                  channels: audio.channels,
+                  layout,
+                }),
             name: `t${pad(no, 2)}p${pad(p + 1, 2)}`,
             data,
           },
@@ -426,6 +441,7 @@ const Album = (() => {
       audio: { ...audio, layout },
       steg: method,
       normalize,
+      encrypted: !!encrypt,
       key: keyB64,
       tracks: trackMeta,
     };
@@ -549,23 +565,88 @@ const Album = (() => {
     return { track: t, parts: mine, missing };
   }
 
-  // Decrypt one part into its own channel data. Each part is a whole
-  // segment in the album's layout, so this stands alone — one image is
-  // playable without the rest of the track.
-  async function decodePart(album, key, part) {
-    const { bits, channels, layout } = album.audio;
-    const clear = await decryptBytes(key, part.iv, part.data);
+  // The audio format of one part. Each part states its own, so this works
+  // with no cover present.
+  function partFormat(album, part) {
+    const a = (album && album.audio) || {};
+    return {
+      rate: part.rate || a.rate || 22050,
+      bits: part.bits || a.bits || 16,
+      channels: part.channels || a.channels || 2,
+      layout: part.layout || a.layout || "planar",
+    };
+  }
+  // Read bytes as PCM in the part's own format. Used for plain parts, and
+  // for the locked case where the bytes are ciphertext — then this is what
+  // the encrypted audio sounds like, which is noise.
+  function bytesToChannels(bytes, fmt) {
     const planar = StegCore.unlayoutChannels({
-      f32: StegCore.toFloat32(clear, bits),
-      layout,
-      channels,
+      f32: StegCore.toFloat32(bytes, fmt.bits),
+      layout: fmt.layout,
+      channels: fmt.channels,
       blockSize: 0,
     });
-    const n = (planar.length / channels) | 0;
+    const n = (planar.length / fmt.channels) | 0;
     const out = [];
-    for (let c = 0; c < channels; c++)
+    for (let c = 0; c < fmt.channels; c++)
       out.push(planar.subarray(c * n, (c + 1) * n));
-    return { channels: out, frames: n, rate: album.audio.rate };
+    return { channels: out, frames: n, rate: fmt.rate };
+  }
+
+  // One part into its own channel data. Each part is a whole segment, so
+  // this stands alone — one image plays without the rest of the track.
+  // With no key, or none needed, the bytes are read as they are: plain
+  // parts play, encrypted ones come out as noise.
+  async function decodePart(album, key, part) {
+    const fmt = partFormat(album, part);
+    const locked = part.encrypted !== false && part.iv && !key;
+    const bytes =
+      part.encrypted === false || !part.iv || locked
+        ? part.data
+        : await decryptBytes(key, part.iv, part.data);
+    return { ...bytesToChannels(bytes, fmt), locked };
+  }
+
+  // A stand-in album for images loaded without their cover: the parts
+  // describe their own format and where they sit, so they can still be
+  // grouped into tracks and played (or heard as noise, if encrypted).
+  function standaloneAlbum(parts) {
+    if (!parts.length) return null;
+    const id = parts[0].id;
+    const mine = parts.filter((p) => p.id === id);
+    const fmt = partFormat(null, mine[0]);
+    const byTrack = new Map();
+    for (const p of mine) {
+      if (!byTrack.has(p.track)) byTrack.set(p.track, []);
+      byTrack.get(p.track).push(p);
+    }
+    const tracks = [...byTrack.keys()]
+      .sort((a, b) => a - b)
+      .map((n) => {
+        const ps = byTrack.get(n).sort((a, b) => a.part - b.part);
+        const frames = ps.reduce((s, p) => s + (p.frames || 0), 0);
+        return {
+          n,
+          title: "track " + n,
+          parts: ps[0].of || ps.length,
+          frames,
+          bytes: ps.reduce((s, p) => s + p.bytes, 0),
+          durationMs: Math.round((frames / fmt.rate) * 1000),
+          lyrics: [],
+        };
+      });
+    return {
+      format: FORMAT,
+      id,
+      album: { title: "album without its cover", artist: "", year: "", notes: "" },
+      ownership: {},
+      audio: fmt,
+      steg: null,
+      encrypted: mine.some((p) => p.encrypted !== false && p.iv),
+      key: null,
+      tracks,
+      synthetic: true,
+    };
   }
 
   // Decrypt every part and lay them end to end. Parts are consecutive
@@ -692,6 +773,8 @@ const Album = (() => {
     trackParts,
     assemble,
     decodePart,
+    partFormat,
+    standaloneAlbum,
     zip,
   };
 })();
