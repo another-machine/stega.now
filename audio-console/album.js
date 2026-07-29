@@ -280,6 +280,12 @@ const Album = (() => {
     if (!coverBlob) throw new Error("no cover image");
     const carrierBlobs = carriers && carriers.length ? carriers : [coverBlob];
     const method = { ...STEG, ...steg };
+    // A non-numeric target would make the gain NaN, and every sample with
+    // it — which reads as full scale but is constant DC, i.e. silence.
+    const norm = {
+      mode: normalize.mode || "album",
+      db: Number.isFinite(normalize.db) ? Math.min(0, normalize.db) : -1,
+    };
 
     // Without encryption the parts carry plain PCM under a real audio
     // mimetype, so each image plays anywhere — including in the plain
@@ -300,7 +306,7 @@ const Album = (() => {
     // album gain needs every peak up front, so measure in a first pass and
     // decode again while encoding (cheaper than holding every track's audio)
     let albumGain = 1;
-    if (normalize.mode === "album") {
+    if (norm.mode === "album") {
       let peak = 0;
       for (let t = 0; t < tracks.length; t++) {
         onProgress(`measuring ${tracks[t].title}`, (t / tracks.length) * 0.25);
@@ -311,8 +317,8 @@ const Album = (() => {
         );
         peak = Math.max(peak, peakOf(channels));
       }
-      if (peak > 0)
-        albumGain = Math.pow(10, (normalize.db ?? -1) / 20) / peak;
+      const g = Math.pow(10, norm.db / 20) / peak;
+      if (peak > 0 && Number.isFinite(g)) albumGain = g;
     }
 
     for (let t = 0; t < tracks.length; t++) {
@@ -324,9 +330,9 @@ const Album = (() => {
         audio.rate,
         audio.channels,
       );
-      if (normalize.mode === "track")
-        StegCore.peakNormalize(channels, { targetDb: normalize.db ?? -1 });
-      else if (normalize.mode === "album" && albumGain !== 1)
+      if (norm.mode === "track")
+        StegCore.peakNormalize(channels, { targetDb: norm.db });
+      else if (norm.mode === "album" && albumGain !== 1)
         for (const c of channels)
           for (let i = 0; i < c.length; i++) c[i] *= albumGain;
       // Cut by FRAMES, not bytes, and lay out each part on its own: every
@@ -439,7 +445,7 @@ const Album = (() => {
       },
       audio: { ...audio, layout },
       steg: method,
-      normalize,
+      normalize: norm,
       encrypted: !!encrypt,
       key: keyB64,
       tracks: trackMeta,
@@ -669,6 +675,87 @@ const Album = (() => {
     return { channels: out, frames: total, rate: album.audio.rate };
   }
 
+  // ---- re-encode without the encryption ----------------------
+  // With the cover in hand the plaintext is recoverable, so the images can
+  // be made again from the audio itself instead of from ciphertext. The
+  // carrier is the reconstruction pulled back out of the cartridge, so the
+  // artwork survives; the difference is that every data pixel now derives
+  // from a real sample. Combines that track amplitude (signed, veil,
+  // midpoint) then show the waveform in the picture rather than noise.
+  async function reencode(album, key, parts, { onProgress = () => {} } = {}) {
+    const method = album.steg || STEG;
+    const files = [];
+    const ordered = [...parts].sort(
+      (a, b) => a.track - b.track || a.part - b.part,
+    );
+    for (let i = 0; i < ordered.length; i++) {
+      const p = ordered[i];
+      onProgress(`re-encoding ${p.track}/${p.part}`, i / ordered.length);
+      const img = await imgFromBlob(p.blob);
+      const { entries, opts } = StegCore.decodeContainer(img, img);
+      const pathIdx = StegCore.getPathIndices(
+        img.width - 2 * (opts.borderWidth || 1),
+        img.height - 2 * (opts.borderWidth || 1),
+        opts.traversal,
+        opts.params || {},
+      );
+      // the cover art as recovered from this cartridge, at full size
+      const rec = StegCore.computeRecon(img, pathIdx, opts);
+      const small = Object.assign(document.createElement("canvas"), {
+        width: rec.width,
+        height: rec.height,
+      });
+      small
+        .getContext("2d")
+        .putImageData(new ImageData(rec.data, rec.width, rec.height), 0, 0);
+      const full = Object.assign(document.createElement("canvas"), {
+        width: img.width,
+        height: img.height,
+      });
+      const fc = full.getContext("2d", { willReadFrequently: true });
+      fc.drawImage(small, 0, 0, img.width, img.height);
+      const carrier = new StegCore.Img(
+        img.width,
+        img.height,
+        new Uint8Array(fc.getImageData(0, 0, img.width, img.height).data),
+      );
+
+      const clear = p.iv
+        ? await decryptBytes(key, p.iv, p.data)
+        : p.data;
+      const info = { ...p, iv: null, encrypted: false, bytes: clear.length };
+      for (const k of ["data", "blob", "opts", "payloadAt", "file"])
+        delete info[k];
+      const audioEntry = entries.find((e) => /^audio\//i.test(e.mimetype));
+      const out = await encodeCartridge(
+        [
+          {
+            mimetype: "application/json",
+            name: PART_ENTRY,
+            data: enc.encode(JSON.stringify(info)),
+          },
+          {
+            mimetype: audioEntry
+              ? audioEntry.mimetype
+              : StegCore.buildAudioMime(partFormat(album, p)),
+            name: `t${pad(p.track, 2)}p${pad(p.part, 2)}`,
+            data: clear,
+          },
+        ],
+        carrier,
+        method,
+      );
+      files.push({
+        name: `${pad(p.track, 2)}-${pad(p.part, 2)}-plain.png`,
+        blob: out.blob,
+        width: out.width,
+        height: out.height,
+      });
+    }
+    onProgress("done", 1);
+    return files;
+  }
+
   // ---- zip (store-only; PNGs are already compressed) ---------
   const CRC = (() => {
     const t = new Uint32Array(256);
@@ -774,6 +861,7 @@ const Album = (() => {
     decodePart,
     partFormat,
     standaloneAlbum,
+    reencode,
     zip,
   };
 })();

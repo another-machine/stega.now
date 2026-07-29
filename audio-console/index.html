@@ -349,6 +349,11 @@
           <span id="npTitle" class="dim"></span>
           <input id="npSeek" type="range" min="0" max="1000" value="0" />
           <span id="npTime" class="dim">0:00 / 0:00</span>
+          <label class="dim"
+            >vol
+            <input id="npVol" type="range" min="0" max="100" value="90" /></label
+          >
+          <span id="npLevel" class="dim"></span>
         </div>
 
         <div class="cols">
@@ -362,6 +367,11 @@
         <fieldset>
           <legend>images</legend>
           <div id="shelves"></div>
+          <div class="row">
+            <button id="reencode" hidden>re-encode from the audio</button>
+            <span id="reencodeNote" class="dim"></span>
+          </div>
+          <div id="reencodeOut"></div>
         </fieldset>
       </div>
     </section>
@@ -453,10 +463,17 @@
         keyMap: $("sKeymap").value,
         border: parseFloat($("sBorder").value) || 0,
       });
-      const normChoice = () => ({
-        mode: $("sNorm").value,
-        db: parseFloat($("sNormDb").value),
-      });
+      const normChoice = () => {
+        // a blank or non-numeric target would silence the album, so it falls
+        // back to the default rather than poisoning the gain with NaN
+        const db = parseFloat($("sNormDb").value);
+        if (!Number.isFinite(db) && $("sNorm").value !== "off")
+          $("sNormDb").value = "-1";
+        return {
+          mode: $("sNorm").value,
+          db: Number.isFinite(db) ? Math.min(0, db) : -1,
+        };
+      };
       function encryptNote() {
         $("encryptNote").textContent = $("sEncrypt").checked
           ? "the tracks need the cover to play — on their own they are noise"
@@ -653,8 +670,11 @@
       let loaded = null,
         albumKey = null;
       let actx = null,
+        master = null,
         timer = null,
         playGen = 0;
+      const partPeaks = new Map(); // "track:part" → peak, so quiet material
+      //                              is visible rather than mysterious
       let np = null; // the playing track: position, spans, queued sources
       const partBufs = new Map(); // "track:part" → AudioBuffer
       const revs = new Map(); // "track:part" → reveal
@@ -668,6 +688,7 @@
         stop();
         $("pprog2").classList.remove("hide");
         partBufs.clear();
+        partPeaks.clear();
         revs.clear();
         shownKey = null;
         np = null;
@@ -768,6 +789,13 @@
           .forEach((b) =>
             b.addEventListener("click", () => playTrack(+b.dataset.n, 0)),
           );
+        // re-encoding is only meaningful once the audio is actually in hand
+        const canRe = !!albumKey && a.encrypted !== false;
+        $("reencode").hidden = !canRe;
+        $("reencodeNote").textContent = canRe
+          ? "makes the images again from the decrypted audio, so their pixels come from the waveform instead of ciphertext"
+          : "";
+        $("reencodeOut").innerHTML = "";
         renderShelves();
       }
 
@@ -936,8 +964,15 @@
         revGen++; // cached images wind back when they are next shown
       }
       function ensureCtx() {
-        actx =
-          actx || new (window.AudioContext || window.webkitAudioContext)();
+        if (!actx) {
+          actx = new (window.AudioContext || window.webkitAudioContext)();
+          master = actx.createGain();
+          master.gain.value = +$("npVol").value / 100;
+          master.connect(actx.destination);
+        }
+        // a context created before the page was interacted with starts
+        // suspended, which would look like playback with no sound
+        if (actx.state === "suspended") actx.resume();
         return actx;
       }
 
@@ -955,12 +990,18 @@
           part,
         );
         const buf = ensureCtx().createBuffer(channels.length, frames, rate);
+        let peak = 0;
         for (let c = 0; c < channels.length; c++) {
           const d = buf.getChannelData(c);
           d.set(channels[c]);
           if (locked) for (let i = 0; i < d.length; i++) d[i] *= LOCKED_GAIN;
+          for (let i = 0; i < d.length; i++) {
+            const a = Math.abs(d[i]);
+            if (a > peak) peak = a;
+          }
         }
         partBufs.set(k, buf);
+        partPeaks.set(k, peak);
         return buf;
       }
 
@@ -1015,7 +1056,7 @@
             if (within < buf.duration - 0.001) {
               const s = actx.createBufferSource();
               s.buffer = buf;
-              s.connect(actx.destination);
+              s.connect(master);
               s.start(at, within);
               np.sources.push(s);
             }
@@ -1098,6 +1139,13 @@
         const span = np.spans[i];
         if (span) {
           showPart(span);
+          const pk = partPeaks.get(span.ref.track + ":" + span.ref.part);
+          $("npLevel").textContent =
+            pk == null
+              ? ""
+              : pk === 0
+                ? "silent"
+                : "peak " + (20 * Math.log10(pk)).toFixed(1) + " dBFS";
           const rev = currentRev(span.ref);
           if (rev && shownKey === span.ref.track + ":" + span.ref.part)
             rev.seek((t - span.start) / Math.max(0.001, span.end - span.start));
@@ -1139,6 +1187,43 @@
       $("pplay").addEventListener("click", () => {
         if (isPlaying()) stop(); // stop() remembers where we were
         else if (np) playTrack(np.n, np.base < np.dur - 0.02 ? np.base : 0);
+      });
+      $("reencode").addEventListener("click", async () => {
+        $("reencode").disabled = true;
+        try {
+          const files = await Album.reencode(
+            loaded.cover,
+            albumKey,
+            loaded.parts,
+            {
+              onProgress: (msg, p) => {
+                $("reencodeNote").textContent =
+                  msg + " " + Math.round(p * 100) + "%";
+              },
+            },
+          );
+          const zipUrl = URL.createObjectURL(await Album.zip(files));
+          $("reencodeOut").innerHTML =
+            `<div class="row"><a href="${zipUrl}" download="${Album.slug(loaded.cover.album.title)}-plain.zip">` +
+            `download re-encoded images (${files.length})</a></div>` +
+            `<div class="shelf">` +
+            files
+              .map(
+                (f) =>
+                  `<figure><img src="${URL.createObjectURL(f.blob)}" alt="${f.name}">` +
+                  `<figcaption>${f.name.replace(/-plain\.png$/, "")}</figcaption></figure>`,
+              )
+              .join("") +
+            `</div>`;
+          $("reencodeNote").textContent =
+            "these carry the audio in the clear — the pixels are the waveform now";
+        } catch (err) {
+          $("reencodeNote").textContent = "✗ " + err.message;
+        }
+        $("reencode").disabled = false;
+      });
+      $("npVol").addEventListener("input", () => {
+        if (master) master.gain.value = +$("npVol").value / 100;
       });
       $("npSeek").addEventListener("pointerdown", () => (dragging = true));
       $("npSeek").addEventListener("input", () => {

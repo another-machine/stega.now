@@ -119,6 +119,25 @@ own:
 The same holds outside this console — drop a track image into the plain
 stega-now player and it plays it as PCM, music or noise depending.
 
+## Re-encoding from the audio
+
+An encrypted image's pixels come from ciphertext, which is random, so they
+carry no trace of the music. With the cover loaded the plaintext is in hand,
+so **re-encode from the audio** makes the images again from the samples
+themselves: the carrier is the artwork reconstructed out of the cartridge, and
+every data pixel now derives from a real sample. Combines that track amplitude
+show it — under `signed`, pixels moved away from the artwork by an average of
+40.8/255 with ciphertext and 2.2/255 re-encoded, because quiet audio leaves a
+pixel where it was and only amplitude displaces it.
+
+The result is an unencrypted set that plays anywhere, with the same audio
+(verified identical to the decrypted original).
+
+## Volume
+
+The player has its own volume, and shows the peak level of the image being
+played — so quiet material reads as quiet rather than as a broken player.
+
 Missing track parts are named, and a track only offers to play when all of its
 parts are there.
 
