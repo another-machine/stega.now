@@ -671,6 +671,7 @@
         albumKey = null;
       let actx = null,
         master = null,
+        meter = null,
         timer = null,
         playGen = 0;
       const partPeaks = new Map(); // "track:part" → peak, so quiet material
@@ -964,11 +965,21 @@
         revGen++; // cached images wind back when they are next shown
       }
       function ensureCtx() {
-        if (!actx) {
+        if (!actx)
           actx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!master) {
           master = actx.createGain();
-          master.gain.value = +$("npVol").value / 100;
-          master.connect(actx.destination);
+          // The meter sits IN the output path rather than off to the side, so
+          // reading it reads what actually leaves for the speakers — tapping
+          // the gain as a side branch would show signal even if the gain
+          // reached nothing. Wire through to the destination first: were the
+          // volume read to throw after this, the chain would already be whole.
+          meter = actx.createAnalyser();
+          meter.fftSize = 1024;
+          master.connect(meter);
+          meter.connect(actx.destination);
+          const v = parseFloat($("npVol") && $("npVol").value);
+          master.gain.value = Number.isFinite(v) ? v / 100 : 0.9;
         }
         // a context created before the page was interacted with starts
         // suspended, which would look like playback with no sound
@@ -1056,16 +1067,46 @@
             if (within < buf.duration - 0.001) {
               const s = actx.createBufferSource();
               s.buffer = buf;
-              s.connect(master);
+              s.connect(master || actx.destination);
               s.start(at, within);
               np.sources.push(s);
             }
             np.scheduledTo = span.end;
             $("pstatus").textContent = "";
           }
+        } catch (err) {
+          // without this the failure is invisible: the playhead is driven by
+          // the clock, so it would look like playback with no sound
+          $("pstatus").textContent = "✗ scheduling failed: " + err.message;
         } finally {
           pumping = false;
         }
+      }
+
+      // Silence is otherwise invisible here: the playhead runs off the audio
+      // clock, so a track can look like it is playing with nothing coming
+      // out. Tap the output once and say so if the buffers carry signal but
+      // the output doesn't.
+      let checkedOutput = false;
+      async function outputCheck() {
+        if (checkedOutput || !actx || !meter) return;
+        checkedOutput = true;
+        const t = new Float32Array(meter.fftSize);
+        let pk = 0;
+        for (let i = 0; i < 14; i++) {
+          await new Promise((r) => setTimeout(r, 50));
+          meter.getFloatTimeDomainData(t);
+          for (let k = 0; k < t.length; k++) {
+            const a = Math.abs(t[k]);
+            if (a > pk) pk = a;
+          }
+        }
+        const shouldHear = [...partPeaks.values()].some((p) => p > 0.001);
+        if (pk < 0.0005 && shouldHear && isPlaying())
+          $("pstatus").textContent =
+            "⚠ audio is scheduled and carries signal, but nothing is reaching " +
+            "the output — check the tab and system volume, and the output " +
+            `device (context: ${actx.state}, volume: ${master.gain.value.toFixed(2)})`;
       }
 
       async function playTrack(n, offset = 0) {
@@ -1103,6 +1144,7 @@
         timer = setInterval(tick, 100);
         pump();
         tick();
+        outputCheck();
       }
 
       function now() {
