@@ -36,6 +36,12 @@ const Album = (() => {
     keyMap: "adjacent",
     border: 0.02,
   };
+  // the methods a build can choose from, straight out of the format
+  const METHODS = {
+    combine: StegCore.COMBINE_NAMES,
+    traversal: StegCore.TRAVERSAL_NAMES,
+    keymap: StegCore.KEYMAP_NAMES,
+  };
 
   const enc = new TextEncoder();
   const dec = new TextDecoder();
@@ -142,13 +148,13 @@ const Album = (() => {
   // The artwork keeps its own resolution whenever it already has room for
   // the payload — scaling it down to the exact fit would turn an album
   // cover into a thumbnail. It is only resized when it is too small.
-  async function encodeCartridge(entries, srcImg) {
+  async function encodeCartridge(entries, srcImg, steg = STEG) {
     const total = StegCore.containerInteriorBytes(entries);
     const aspect = srcImg.width / srcImg.height;
     const dataPx = Math.ceil(total / 3);
-    const B = StegCore.resolveBorderWidth(STEG.border, dataPx, aspect);
+    const B = StegCore.resolveBorderWidth(steg.border, dataPx, aspect);
     const nativeB = StegCore.resolveBorderWidth(
-      STEG.border,
+      steg.border,
       Math.ceil((srcImg.width * srcImg.height) / 2),
       aspect,
     );
@@ -161,9 +167,9 @@ const Album = (() => {
     const useB = fits ? nativeB : B;
     const scaled = fits ? srcImg : StegCore.autoScaleImg(srcImg, total, B, null, 3);
     const out = StegCore.encodeContainer(entries, scaled, scaled, {
-      combine: STEG.combine,
-      traversal: STEG.traversal,
-      keyMap: STEG.keyMap,
+      combine: steg.combine,
+      traversal: steg.traversal,
+      keyMap: steg.keyMap,
       borderWidth: useB,
       params: {},
     });
@@ -238,9 +244,25 @@ const Album = (() => {
     return found;
   }
 
+  // peak of the loudest sample across a track's channels
+  function peakOf(channels) {
+    let peak = 0;
+    for (const c of channels)
+      for (let i = 0; i < c.length; i++) {
+        const a = Math.abs(c[i]);
+        if (a > peak) peak = a;
+      }
+    return peak;
+  }
+
   // ---- build -------------------------------------------------
   // tracks: [{ file, title, lyrics }]  carriers: [Blob] (cycled)
   // audio:  { rate, bits, channels }   partsPerTrack: n
+  // steg:   { combine, traversal, keyMap, border }
+  // normalize: { mode: "album" | "track" | "off", db }
+  //   album — one shared gain, so the loudest moment on the record hits the
+  //           target and the tracks keep their relative loudness
+  //   track — every track peaks at the target
   async function build({
     tracks,
     coverBlob,
@@ -249,21 +271,44 @@ const Album = (() => {
     ownership = {},
     audio = { rate: 22050, bits: 16, channels: 2 },
     partsPerTrack = 1,
+    steg = {},
+    normalize = { mode: "album", db: -1 },
     onProgress = () => {},
   }) {
     if (!tracks || !tracks.length) throw new Error("no audio tracks");
     if (!coverBlob) throw new Error("no cover image");
     const carrierBlobs = carriers && carriers.length ? carriers : [coverBlob];
+    const method = { ...STEG, ...steg };
 
     const keyB64 = newKey();
     const key = await importKey(keyB64);
     const albumId = hex(8);
-    const layout = audio.channels > 1 ? "planar" : "planar";
+    // interleaved so a part's bytes are a contiguous stretch of TIME —
+    // that is what lets the player follow the song from image to image
+    const layout = "interleaved";
 
     const files = [];
     const trackMeta = [];
     let carrierIdx = 0;
     const carrierImgs = new Map(); // decoded lazily, reused across parts
+
+    // album gain needs every peak up front, so measure in a first pass and
+    // decode again while encoding (cheaper than holding every track's audio)
+    let albumGain = 1;
+    if (normalize.mode === "album") {
+      let peak = 0;
+      for (let t = 0; t < tracks.length; t++) {
+        onProgress(`measuring ${tracks[t].title}`, (t / tracks.length) * 0.25);
+        const { channels } = await decodeAudioFile(
+          tracks[t].file,
+          audio.rate,
+          audio.channels,
+        );
+        peak = Math.max(peak, peakOf(channels));
+      }
+      if (peak > 0)
+        albumGain = Math.pow(10, (normalize.db ?? -1) / 20) / peak;
+    }
 
     for (let t = 0; t < tracks.length; t++) {
       const tr = tracks[t];
@@ -274,6 +319,11 @@ const Album = (() => {
         audio.rate,
         audio.channels,
       );
+      if (normalize.mode === "track")
+        StegCore.peakNormalize(channels, { targetDb: normalize.db ?? -1 });
+      else if (normalize.mode === "album" && albumGain !== 1)
+        for (const c of channels)
+          for (let i = 0; i < c.length; i++) c[i] *= albumGain;
       const interleavedOrder = StegCore.layoutChannels({
         mixed: channels,
         layout,
@@ -322,6 +372,7 @@ const Album = (() => {
         const { blob, width, height } = await encodeCartridge(
           entries,
           carrierImgs.get(cb),
+          method,
         );
         files.push({
           name: `${pad(no, 2)}-${pad(p + 1, 2)}-${slug(tr.title)}.png`,
@@ -360,6 +411,8 @@ const Album = (() => {
         note: ownership.note || "",
       },
       audio: { ...audio, layout },
+      steg: method,
+      normalize,
       key: keyB64,
       tracks: trackMeta,
     };
@@ -379,6 +432,7 @@ const Album = (() => {
     const cover = await encodeCartridge(
       coverEntries,
       carrierImgs.get(coverBlob) || (await imgFromBlob(coverBlob)),
+      method,
     );
     files.unshift({
       name: `00-cover-${slug(albumJson.album.title)}.png`,
@@ -396,7 +450,8 @@ const Album = (() => {
   async function read(fileList, onProgress = () => {}) {
     const files = [...fileList].filter((f) => /\.png$/i.test(f.name));
     let cover = null,
-      art = null;
+      art = null,
+      coverBlob = null;
     const parts = [];
     const skipped = [];
     for (let i = 0; i < files.length; i++) {
@@ -410,13 +465,21 @@ const Album = (() => {
           cover = JSON.parse(dec.decode(cj.data));
           const a = entries.find((e) => e.name === "cover");
           if (a) art = new Blob([a.data], { type: a.mimetype });
+          coverBlob = f;
           continue;
         }
         const pj = entries.find((e) => e.name === PART_ENTRY);
         if (pj) {
           const info = JSON.parse(dec.decode(pj.data));
           const payload = entries.find((e) => e.name !== PART_ENTRY);
-          parts.push({ ...info, data: payload ? payload.data : null, file: f.name });
+          // the file is kept so the reveal can re-read the image later
+          // without holding every cartridge's pixels in memory at once
+          parts.push({
+            ...info,
+            data: payload ? payload.data : null,
+            file: f.name,
+            blob: f,
+          });
           continue;
         }
         skipped.push(f.name + ": not part of an album");
@@ -425,7 +488,29 @@ const Album = (() => {
       }
     }
     onProgress("done", 1);
-    return { cover, art, parts, skipped };
+    return { cover, art, coverBlob, parts, skipped };
+  }
+
+  // Where each part sits in the song. Interleaved PCM means a part's bytes
+  // are a contiguous stretch of time, so a part maps to a span of seconds —
+  // which is what lets playback follow the song from image to image.
+  function partSpans(album, parts) {
+    const bpf = album.audio.channels * (album.audio.bits / 8);
+    const rate = album.audio.rate;
+    let off = 0;
+    return [...parts]
+      .sort((a, b) => a.part - b.part)
+      .map((p) => {
+        const start = off / bpf / rate;
+        off += p.bytes;
+        return { ref: p, part: p.part, start, end: off / bpf / rate };
+      });
+  }
+  // which span contains `sec`
+  function spanAt(spans, sec) {
+    for (let i = spans.length - 1; i >= 0; i--)
+      if (sec >= spans[i].start) return i;
+    return 0;
   }
 
   // Which parts are present / missing for a track.
@@ -548,6 +633,9 @@ const Album = (() => {
     COVER_ENTRY,
     PART_ENTRY,
     STEG,
+    METHODS,
+    partSpans,
+    spanAt,
     slug,
     pad,
     fmtTime,

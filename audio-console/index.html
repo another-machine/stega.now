@@ -48,9 +48,6 @@
       legend {
         padding: 0 4px;
       }
-      label {
-        display: inline-block;
-      }
       .row {
         display: flex;
         flex-wrap: wrap;
@@ -63,7 +60,7 @@
         grid-template-columns: max-content 1fr;
         gap: 3px 8px;
         align-items: center;
-        max-width: 640px;
+        max-width: 620px;
       }
       table {
         border-collapse: collapse;
@@ -74,7 +71,6 @@
         border: 1px solid;
         padding: 2px 5px;
         text-align: left;
-        vertical-align: middle;
       }
       th {
         font-weight: normal;
@@ -96,14 +92,14 @@
         opacity: 0.6;
       }
       #art {
-        width: 140px;
+        width: 130px;
         display: block;
-        image-rendering: auto;
       }
       #lyrics {
-        max-height: 46vh;
+        max-height: 34vh;
         overflow: auto;
         margin: 4px 0;
+        min-width: 220px;
       }
       #lyrics div {
         opacity: 0.45;
@@ -112,13 +108,6 @@
       #lyrics div.now {
         opacity: 1;
         font-weight: bold;
-      }
-      #lyrics div.none {
-        opacity: 0.45;
-        font-style: italic;
-      }
-      progress {
-        width: 220px;
       }
       .cols {
         display: flex;
@@ -131,8 +120,52 @@
         margin: 4px 0;
         padding: 0;
       }
-      ul.files li {
-        margin: 1px 0;
+      #npSeek {
+        width: 260px;
+      }
+      /* the album's images, all of them */
+      .shelf {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        align-items: flex-start;
+        margin: 2px 0 6px;
+      }
+      .shelf figure {
+        margin: 0;
+        text-align: center;
+      }
+      .shelf img {
+        display: block;
+        width: 52px;
+        image-rendering: pixelated;
+        opacity: 0.4;
+        border: 1px solid transparent;
+      }
+      .shelf figure.now img {
+        opacity: 1;
+        border-color: currentColor;
+      }
+      .shelf figcaption {
+        font-size: 9px;
+        opacity: 0.5;
+      }
+      /* the reveal: encoded on top, reconstruction underneath */
+      .rev {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+      }
+      .rev canvas {
+        display: block;
+        height: 40vh;
+        width: auto;
+        image-rendering: pixelated;
+      }
+      .rev canvas + canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
       }
     </style>
   </head>
@@ -141,17 +174,16 @@
     <div class="row">
       <button id="tabBuild">build an album</button>
       <button id="tabPlay">play an album</button>
-      <span class="dim" id="mode"></span>
     </div>
 
     <!-- ═══ BUILD ═══════════════════════════════════════════ -->
     <section id="build">
       <div class="drop" id="bdrop">
         drop a folder of media here, or
-        <label><input type="file" id="bfiles" multiple hidden />
-          <button type="button" onclick="bfiles.click()">choose files</button></label>
-        <label><input type="file" id="bdir" webkitdirectory hidden />
-          <button type="button" onclick="bdir.click()">choose a folder</button></label>
+        <input type="file" id="bfiles" multiple hidden />
+        <button type="button" id="bpickFiles">choose files</button>
+        <input type="file" id="bdir" webkitdirectory hidden />
+        <button type="button" id="bpickDir">choose a folder</button>
         <div class="dim">
           audio files become tracks · images carry them · the first image (or
           one named cover*) is the record · .lrc files matching a track name
@@ -178,7 +210,8 @@
           <legend>ownership</legend>
           <div class="grid">
             <span>owner</span><input id="oOwner" />
-            <span>purchased</span><input id="oPurchased" placeholder="2026-07-29" />
+            <span>purchased</span
+            ><input id="oPurchased" placeholder="2026-07-29" />
             <span>copy</span><input id="oCopy" placeholder="3/50" size="8" />
             <span>note</span><input id="oNote" />
           </div>
@@ -204,9 +237,39 @@
               <option selected>2</option>
             </select>
             <span>images per track</span>
-            <input id="aParts" type="number" min="1" max="64" value="1" size="4" />
+            <input
+              id="aParts"
+              type="number"
+              min="1"
+              max="64"
+              value="1"
+              size="4"
+            />
+            <span>normalize</span>
+            <select id="sNorm">
+              <option value="album" selected>album — one shared gain</option>
+              <option value="track">track — each peaks alike</option>
+              <option value="off">off</option>
+            </select>
+            <span>peak dBFS</span>
+            <input id="sNormDb" type="number" value="-1" step="0.5" size="5" />
           </div>
           <div class="dim" id="estimate"></div>
+        </fieldset>
+        <fieldset>
+          <legend>encoding method</legend>
+          <div class="grid">
+            <span>combine</span><select id="sCombine"></select>
+            <span>traversal</span><select id="sTraversal"></select>
+            <span>keymap</span><select id="sKeymap"></select>
+            <span>border</span
+            ><input id="sBorder" value="0.02" size="6" title="fraction of width, or whole px ≥ 1" />
+          </div>
+          <div class="dim">
+            combine decides how much the payload disturbs the artwork · the
+            traversal is the order it fills, and the order it develops in on
+            playback
+          </div>
         </fieldset>
       </div>
 
@@ -222,10 +285,10 @@
     <section id="play" class="hide">
       <div class="drop" id="pdrop">
         drop an album folder here, or
-        <label><input type="file" id="pfiles" multiple hidden />
-          <button type="button" onclick="pfiles.click()">choose files</button></label>
-        <label><input type="file" id="pdir" webkitdirectory hidden />
-          <button type="button" onclick="pdir.click()">choose a folder</button></label>
+        <input type="file" id="pfiles" multiple hidden />
+        <button type="button" id="ppickFiles">choose files</button>
+        <input type="file" id="pdir" webkitdirectory hidden />
+        <button type="button" id="ppickDir">choose a folder</button>
         <div class="dim">
           the cover cartridge holds the key — without it the tracks stay locked
         </div>
@@ -239,26 +302,39 @@
         <div class="cols">
           <div>
             <img id="art" alt="cover art" />
-          </div>
-          <div>
             <div id="albumMeta"></div>
             <div id="ownerMeta" class="dim"></div>
-            <table id="trackTable"></table>
+            <div id="methodMeta" class="dim"></div>
           </div>
           <div>
-            <div class="row">
-              <button id="pplay" disabled>play</button>
-              <span id="npTitle" class="dim"></span>
-              <progress id="npProg" value="0" max="1"></progress>
-              <span id="npTime" class="dim">0:00 / 0:00</span>
-            </div>
-            <div id="lyrics"></div>
+            <table id="trackTable"></table>
           </div>
         </div>
+
+        <div class="row">
+          <button id="pplay" disabled>play</button>
+          <span id="npTitle" class="dim"></span>
+          <input id="npSeek" type="range" min="0" max="1000" value="0" />
+          <span id="npTime" class="dim">0:00 / 0:00</span>
+        </div>
+
+        <div class="cols">
+          <div>
+            <div id="revBox"></div>
+            <div class="dim" id="revLabel"></div>
+          </div>
+          <div id="lyrics"></div>
+        </div>
+
+        <fieldset>
+          <legend>images</legend>
+          <div id="shelves"></div>
+        </fieldset>
       </div>
     </section>
 
     <script src="../lib/steg-core.js"></script>
+    <script src="../lib/reveal.js"></script>
     <script src="album.js"></script>
     <script>
       "use strict";
@@ -267,11 +343,9 @@
       const IMAGE_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
       const LYRIC_RE = /\.(lrc|txt)$/i;
 
-      // ---- mode ------------------------------------------------
       function setMode(m) {
         $("build").classList.toggle("hide", m !== "build");
         $("play").classList.toggle("hide", m !== "play");
-        $("mode").textContent = m === "build" ? "" : "";
       }
       $("tabBuild").addEventListener("click", () => setMode("build"));
       $("tabPlay").addEventListener("click", () => setMode("play"));
@@ -280,21 +354,19 @@
       // the files inside — same result as the folder picker.
       async function filesFromDrop(dt) {
         const out = [];
-        const items = [...(dt.items || [])];
-        const entries = items
+        const entries = [...(dt.items || [])]
           .map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null))
           .filter(Boolean);
         if (!entries.length) return [...(dt.files || [])];
         async function walk(entry, path) {
           if (entry.isFile) {
             const f = await new Promise((res, rej) => entry.file(res, rej));
-            if (!f.webkitRelativePath) {
+            if (!f.webkitRelativePath)
               try {
                 Object.defineProperty(f, "webkitRelativePath", {
                   value: path + f.name,
                 });
               } catch (_) {}
-            }
             out.push(f);
           } else if (entry.isDirectory) {
             const reader = entry.createReader();
@@ -330,6 +402,29 @@
       // ═══ BUILD ═════════════════════════════════════════════
       let picked = { tracks: [], images: [], cover: null };
 
+      // the method menus come from the format itself
+      for (const [id, list, def] of [
+        ["sCombine", Album.METHODS.combine, Album.STEG.combine],
+        ["sTraversal", Album.METHODS.traversal, Album.STEG.traversal],
+        ["sKeymap", Album.METHODS.keymap, Album.STEG.keyMap],
+      ]) {
+        $(id).innerHTML = list
+          .map(
+            (n) => `<option${n === def ? " selected" : ""}>${n}</option>`,
+          )
+          .join("");
+      }
+      const stegChoice = () => ({
+        combine: $("sCombine").value,
+        traversal: $("sTraversal").value,
+        keyMap: $("sKeymap").value,
+        border: parseFloat($("sBorder").value) || 0,
+      });
+      const normChoice = () => ({
+        mode: $("sNorm").value,
+        db: parseFloat($("sNormDb").value),
+      });
+
       function titleFromName(name) {
         return name
           .replace(/\.[^.]+$/, "")
@@ -339,16 +434,13 @@
       const keyOf = (name) => Album.slug(titleFromName(name));
 
       async function takeBuildFiles(files) {
-        const audio = [...files]
-          .filter((f) => AUDIO_RE.test(f.name))
-          .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-        const images = [...files]
-          .filter((f) => IMAGE_RE.test(f.name))
-          .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        const byName = (a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true });
+        const audio = [...files].filter((f) => AUDIO_RE.test(f.name)).sort(byName);
+        const images = [...files].filter((f) => IMAGE_RE.test(f.name)).sort(byName);
         const lyrics = [...files].filter((f) => LYRIC_RE.test(f.name));
         const albumMeta = [...files].find((f) => /(^|\/)album\.json$/i.test(f.name));
 
-        // a file named cover* is the record; otherwise the first image is
         const coverIdx = images.findIndex((f) => /(^|\/)cover/i.test(f.name));
         const cover = images.length
           ? images.splice(coverIdx >= 0 ? coverIdx : 0, 1)[0]
@@ -367,27 +459,28 @@
                 file: f,
                 title: titleFromName(f.name),
                 lyrics: lf ? Album.parseLrc(await lf.text()) : [],
-                lyricFile: lf ? lf.name : null,
               };
             }),
           ),
         };
 
-        if (albumMeta) {
+        if (albumMeta)
           try {
             const j = JSON.parse(await albumMeta.text());
-            const a = j.album || j;
-            if (a.title) $("mTitle").value = a.title;
-            if (a.artist) $("mArtist").value = a.artist;
-            if (a.year) $("mYear").value = a.year;
-            if (a.notes) $("mNotes").value = a.notes;
-            const o = j.ownership || {};
-            if (o.owner) $("oOwner").value = o.owner;
-            if (o.purchased) $("oPurchased").value = o.purchased;
-            if (o.copy) $("oCopy").value = o.copy;
-            if (o.note) $("oNote").value = o.note;
+            const a = j.album || j,
+              o = j.ownership || {};
+            for (const [id, v] of [
+              ["mTitle", a.title],
+              ["mArtist", a.artist],
+              ["mYear", a.year],
+              ["mNotes", a.notes],
+              ["oOwner", o.owner],
+              ["oPurchased", o.purchased],
+              ["oCopy", o.copy],
+              ["oNote", o.note],
+            ])
+              if (v) $(id).value = v;
           } catch (_) {}
-        }
         if (!$("mTitle").value && picked.tracks.length) {
           const rel = picked.tracks[0].file.webkitRelativePath || "";
           if (rel.includes("/")) $("mTitle").value = rel.split("/")[0];
@@ -397,27 +490,27 @@
 
       function renderBuild() {
         const box = $("btracks");
-        box.classList.remove("dim");
         if (!picked.tracks.length) {
           box.className = "dim";
           box.textContent = "nothing loaded yet";
           $("buildBtn").disabled = true;
           return;
         }
-        const rows = picked.tracks
-          .map(
-            (t, i) =>
-              `<tr><td>${i + 1}</td>` +
-              `<td><input data-i="${i}" class="ttitle" value="${t.title.replace(/"/g, "&quot;")}" size="26"></td>` +
-              `<td class="dim">${t.file.name}</td>` +
-              `<td class="dim">${t.lyrics.length ? t.lyrics.length + " lyric lines" : "no lyrics"}</td></tr>`,
-          )
-          .join("");
+        box.className = "";
         box.innerHTML =
-          `<table><tr><th>#</th><th>title</th><th>file</th><th>lyrics</th></tr>${rows}</table>` +
-          `<div class="dim">cover: ${picked.cover ? picked.cover.name : "— none, pick an image"} · ` +
+          `<table><tr><th>#</th><th>title</th><th>file</th><th>lyrics</th></tr>` +
+          picked.tracks
+            .map(
+              (t, i) =>
+                `<tr><td>${i + 1}</td>` +
+                `<td><input data-i="${i}" class="ttitle" value="${t.title.replace(/"/g, "&quot;")}" size="26"></td>` +
+                `<td class="dim">${t.file.name}</td>` +
+                `<td class="dim">${t.lyrics.length ? t.lyrics.length + " lines" : "—"}</td></tr>`,
+            )
+            .join("") +
+          `</table><div class="dim">cover: ${picked.cover ? picked.cover.name : "— none, add an image"} · ` +
           `${picked.images.length} carrier image${picked.images.length === 1 ? "" : "s"}` +
-          (picked.images.length ? "" : " (the cover will carry everything)") +
+          (picked.images.length ? "" : " (the cover carries everything)") +
           `</div>`;
         box.querySelectorAll(".ttitle").forEach((inp) =>
           inp.addEventListener("input", () => {
@@ -433,28 +526,25 @@
           bits = +$("aBits").value,
           ch = +$("aCh").value,
           parts = Math.max(1, +$("aParts").value || 1);
-        // duration isn't known until decode, so estimate from file size at a
-        // rough 128kbps for compressed input; wav we can read exactly enough
         let secs = 0;
-        for (const t of picked.tracks) {
-          const bytes = t.file.size;
+        for (const t of picked.tracks)
           secs += /\.wav$/i.test(t.file.name)
-            ? bytes / (44100 * 2 * 2)
-            : bytes / 16000;
-        }
+            ? t.file.size / (44100 * 2 * 2)
+            : t.file.size / 16000;
         const pcm = secs * rate * ch * (bits / 8);
         const perPart = pcm / Math.max(1, picked.tracks.length) / parts;
-        const px = (perPart / 3) * 2;
         $("estimate").textContent = picked.tracks.length
-          ? `≈ ${(pcm / 1048576).toFixed(1)} MB of audio total · ` +
+          ? `≈ ${(pcm / 1048576).toFixed(1)} MB of audio · ` +
             `≈ ${(perPart / 1048576).toFixed(1)} MB per image ` +
-            `(≈ ${(px / 1e6).toFixed(1)} MP) — more images per track means smaller images`
+            `(≈ ${((perPart / 3) * 2 / 1e6).toFixed(1)} MP) — more images per track means smaller images`
           : "";
       }
       for (const id of ["aRate", "aBits", "aCh", "aParts"])
         $(id).addEventListener("change", estimate);
       $("aParts").addEventListener("input", estimate);
 
+      $("bpickFiles").addEventListener("click", () => $("bfiles").click());
+      $("bpickDir").addEventListener("click", () => $("bdir").click());
       $("bfiles").addEventListener("change", (e) => takeBuildFiles(e.target.files));
       $("bdir").addEventListener("change", (e) => takeBuildFiles(e.target.files));
       wireDrop($("bdrop"), takeBuildFiles);
@@ -467,7 +557,7 @@
           const { files, album } = await Album.build({
             tracks: picked.tracks,
             coverBlob: picked.cover,
-            carriers: picked.images.length ? picked.images : [picked.cover],
+            carriers: picked.images,
             meta: {
               title: $("mTitle").value,
               artist: $("mArtist").value,
@@ -486,17 +576,20 @@
               channels: +$("aCh").value,
             },
             partsPerTrack: +$("aParts").value,
+            steg: stegChoice(),
+            normalize: normChoice(),
             onProgress: (msg, p) => {
               $("bstatus").textContent = msg;
               $("bprog").value = p;
             },
           });
-          const zipBlob = await Album.zip(files);
-          const zipUrl = URL.createObjectURL(zipBlob);
+          const zipUrl = URL.createObjectURL(await Album.zip(files));
           const total = files.reduce((n, f) => n + f.blob.size, 0);
           $("bout").innerHTML =
             `<div class="row"><a href="${zipUrl}" download="${Album.slug(album.album.title)}-album.zip">` +
-            `download album (${files.length} files, ${(total / 1048576).toFixed(1)} MB)</a></div>` +
+            `download album (${files.length} files, ${(total / 1048576).toFixed(1)} MB)</a>` +
+            `<span class="dim">${album.steg.combine} / ${album.steg.traversal} / ${album.steg.keyMap} · ` +
+            `normalize: ${album.normalize.mode}${album.normalize.mode === "off" ? "" : " @ " + album.normalize.db + " dBFS"}</span></div>` +
             `<ul class="files">` +
             files
               .map(
@@ -515,20 +608,28 @@
       });
 
       // ═══ PLAY ══════════════════════════════════════════════
-      let loaded = null; // { cover, art, parts }
-      let albumKey = null;
+      let loaded = null,
+        albumKey = null;
       let actx = null,
         src = null,
         timer = null;
-      let np = null; // { n, track, buffer, startedAt }
+      let np = null; // { n, track, dur, spans, base, startedAt, stopped }
       const buffers = new Map(); // track n → AudioBuffer
+      const revs = new Map(); // "track:part" → reveal
+      const shelfUrls = [];
+      let shownKey = null,
+        revLoading = false,
+        dragging = false;
 
       async function takePlayFiles(files) {
-        $("pprog2").classList.remove("hide");
-        $("pstatus").textContent = "reading…";
         stop();
+        $("pprog2").classList.remove("hide");
         buffers.clear();
+        revs.clear();
+        shownKey = null;
+        np = null;
         albumKey = null;
+        for (const u of shelfUrls.splice(0)) URL.revokeObjectURL(u);
         loaded = await Album.read(files, (msg, p) => {
           $("pstatus").textContent = msg;
           $("pprog2").value = p;
@@ -536,12 +637,10 @@
         $("pprog2").classList.add("hide");
         if (!loaded.cover) {
           $("albumView").classList.add("hide");
-          const byTrack = new Map();
-          for (const p of loaded.parts)
-            byTrack.set(p.track, (byTrack.get(p.track) || 0) + 1);
+          const tracks = new Set(loaded.parts.map((p) => p.track));
           $("pstatus").textContent = loaded.parts.length
-            ? `locked — found ${loaded.parts.length} encrypted part(s) for ` +
-              `${byTrack.size} track(s), but no album cover. The cover holds the key.`
+            ? `locked — ${loaded.parts.length} encrypted part(s) for ${tracks.size} track(s), ` +
+              `but no album cover. The cover holds the key.`
             : "nothing readable here" +
               (loaded.skipped.length ? " — " + loaded.skipped.join("; ") : "");
           return;
@@ -549,24 +648,27 @@
         albumKey = await Album.importKey(loaded.cover.key);
         renderAlbum();
         $("pstatus").textContent =
-          "unlocked with " +
-          (loaded.cover.album.title || "cover") +
+          "unlocked with " + (loaded.cover.album.title || "the cover") +
           (loaded.skipped.length ? " · skipped: " + loaded.skipped.join("; ") : "");
       }
 
       function renderAlbum() {
         const a = loaded.cover;
         $("albumView").classList.remove("hide");
-        if (loaded.art) $("art").src = URL.createObjectURL(loaded.art);
+        if (loaded.art) {
+          const u = URL.createObjectURL(loaded.art);
+          shelfUrls.push(u);
+          $("art").src = u;
+        }
         $("albumMeta").innerHTML =
           `<b>${a.album.title || "untitled"}</b>` +
           (a.album.artist ? " — " + a.album.artist : "") +
           (a.album.year ? " (" + a.album.year + ")" : "") +
-          `<br><span class="dim">${a.audio.rate} Hz · ${a.audio.bits}-bit · ` +
-          `${a.audio.channels}ch · ${a.tracks.length} tracks</span>` +
+          `<br><span class="dim">${a.audio.rate} Hz · ${a.audio.bits}-bit · ${a.audio.channels}ch · ` +
+          `${a.tracks.length} tracks</span>` +
           (a.album.notes ? `<br>${a.album.notes}` : "");
         const o = a.ownership || {};
-        const owner = [
+        $("ownerMeta").textContent = [
           o.owner && "owner: " + o.owner,
           o.purchased && "purchased: " + o.purchased,
           o.copy && "copy: " + o.copy,
@@ -574,32 +676,124 @@
         ]
           .filter(Boolean)
           .join(" · ");
-        $("ownerMeta").innerHTML = owner || "";
+        $("methodMeta").textContent = a.steg
+          ? `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keyMap}` +
+            (a.normalize ? ` · normalize: ${a.normalize.mode}` : "")
+          : "";
 
-        const rows = a.tracks
-          .map((t) => {
-            const { parts, missing } = Album.trackParts(a, loaded.parts, t.n);
-            const ok = parts.length && !missing.length;
-            return (
-              `<tr><td>${t.n}</td><td>${t.title}</td>` +
-              `<td class="dim">${Album.fmtTime(t.durationMs / 1000)}</td>` +
-              `<td class="dim">${parts.length}/${t.parts} parts${missing.length ? " (missing " + missing.join(",") + ")" : ""}</td>` +
-              `<td class="dim">${t.lyrics && t.lyrics.length ? t.lyrics.length + " lines" : "—"}</td>` +
-              `<td>${ok ? `<button data-n="${t.n}">play</button>` : '<span class="dim">incomplete</span>'}</td></tr>`
-            );
-          })
-          .join("");
         $("trackTable").innerHTML =
           `<tr><th>#</th><th>title</th><th>time</th><th>images</th><th>lyrics</th><th></th></tr>` +
-          rows;
+          a.tracks
+            .map((t) => {
+              const { parts, missing } = Album.trackParts(a, loaded.parts, t.n);
+              const ok = parts.length && !missing.length;
+              return (
+                `<tr><td>${t.n}</td><td>${t.title}</td>` +
+                `<td class="dim">${Album.fmtTime(t.durationMs / 1000)}</td>` +
+                `<td class="dim">${parts.length}/${t.parts}${missing.length ? " (missing " + missing.join(",") + ")" : ""}</td>` +
+                `<td class="dim">${t.lyrics && t.lyrics.length ? t.lyrics.length : "—"}</td>` +
+                `<td>${ok ? `<button data-n="${t.n}">play</button>` : '<span class="dim">incomplete</span>'}</td></tr>`
+              );
+            })
+            .join("");
         $("trackTable")
           .querySelectorAll("button[data-n]")
           .forEach((b) =>
-            b.addEventListener("click", () => playTrack(+b.dataset.n)),
+            b.addEventListener("click", () => playTrack(+b.dataset.n, 0)),
           );
+        renderShelves();
       }
 
+      // every image in the album, cover first, grouped by track
+      function renderShelves() {
+        const box = $("shelves");
+        box.innerHTML = "";
+        const thumb = (blob, cap, key) => {
+          const fig = document.createElement("figure");
+          if (key) fig.dataset.key = key;
+          const img = document.createElement("img");
+          const u = URL.createObjectURL(blob);
+          shelfUrls.push(u);
+          img.src = u;
+          img.alt = cap;
+          const c = document.createElement("figcaption");
+          c.textContent = cap;
+          fig.append(img, c);
+          return fig;
+        };
+        if (loaded.coverBlob) {
+          const shelf = document.createElement("div");
+          shelf.className = "shelf";
+          shelf.appendChild(thumb(loaded.coverBlob, "cover", null));
+          box.appendChild(shelf);
+        }
+        for (const t of loaded.cover.tracks) {
+          const { parts } = Album.trackParts(loaded.cover, loaded.parts, t.n);
+          if (!parts.length) continue;
+          const line = document.createElement("div");
+          line.textContent = t.n + " " + t.title;
+          const shelf = document.createElement("div");
+          shelf.className = "shelf";
+          for (const p of parts)
+            shelf.appendChild(
+              thumb(p.blob, "p" + p.part, t.n + ":" + p.part),
+            );
+          box.append(line, shelf);
+        }
+        markShelf();
+      }
+      function markShelf() {
+        $("shelves")
+          .querySelectorAll("figure[data-key]")
+          .forEach((f) => f.classList.toggle("now", f.dataset.key === shownKey));
+      }
+
+      // ---- the reveal for one part -------------------------------
+      // Built on demand from the part's file: holding every cartridge's
+      // pixels at once would be hundreds of MB on a real album.
+      async function revealFor(part) {
+        const key = part.track + ":" + part.part;
+        if (revs.has(key)) return revs.get(key);
+        const img = await Album.imgFromBlob(part.blob);
+        const { entries, opts } = StegCore.decodeContainer(img, img);
+        const payload = entries.find((e) => e.name !== Album.PART_ENTRY);
+        const rev = Reveal.build(img, opts, payload);
+        revs.set(key, rev);
+        for (const k of [...revs.keys()])
+          if (revs.size > 3 && k !== key && k !== shownKey) revs.delete(k);
+        return rev;
+      }
+      function showPart(span) {
+        const key = span.ref.track + ":" + span.ref.part;
+        if (revLoading || key === shownKey) return;
+        revLoading = true;
+        revealFor(span.ref)
+          .then((rev) => {
+            revLoading = false;
+            shownKey = key;
+            $("revBox").innerHTML = "";
+            $("revBox").appendChild(rev.el);
+            $("revLabel").textContent =
+              `image ${span.ref.part}/${span.ref.of} · ` +
+              `${Album.fmtTime(span.start)}–${Album.fmtTime(span.end)} · developing as it decodes`;
+            markShelf();
+            const next = np && np.spans[span.part]; // 0-based next
+            if (next) revealFor(next.ref).catch(() => {});
+          })
+          .catch((err) => {
+            revLoading = false;
+            $("revLabel").textContent = "✗ " + err.message;
+          });
+      }
+
+      // Stopping keeps the playhead where it was: the position is only ever
+      // read from the clock while actually playing, otherwise it would keep
+      // running on against a stale start time.
       function stop() {
+        if (np) {
+          np.base = now();
+          np.playing = false;
+        }
         if (src) {
           try {
             src.stop();
@@ -612,8 +806,12 @@
         }
         $("pplay").textContent = "play";
       }
+      function resetReveals() {
+        for (const r of revs.values()) r.reset();
+        shownKey = null;
+        $("revBox").innerHTML = "";
+      }
 
-      // Decrypt + join the track's parts, then play the result as one buffer.
       async function trackBuffer(n) {
         if (buffers.has(n)) return buffers.get(n);
         const { track, parts, missing } = Album.trackParts(loaded.cover, loaded.parts, n);
@@ -634,7 +832,7 @@
         return buf;
       }
 
-      async function playTrack(n) {
+      async function playTrack(n, offset = 0) {
         stop();
         let buf;
         try {
@@ -644,19 +842,37 @@
           return;
         }
         const track = loaded.cover.tracks.find((t) => t.n === n);
-        renderLyrics(track);
-        src = actx.createBufferSource();
-        src.buffer = buf;
-        src.connect(actx.destination);
-        src.onended = () => {
-          if (np && np.n === n && !np.stopped) {
-            const next = loaded.cover.tracks.find((t) => t.n === n + 1);
-            if (next) return playTrack(next.n); // play the album through
-          }
+        const { parts } = Album.trackParts(loaded.cover, loaded.parts, n);
+        const spans = Album.partSpans(loaded.cover, parts);
+        if (!np || np.n !== n) renderLyrics(track);
+        // a seek can land anywhere, so the images start over from encoded
+        resetReveals();
+
+        const mine = actx.createBufferSource();
+        mine.buffer = buf;
+        mine.connect(actx.destination);
+        mine.onended = () => {
+          if (mine !== src) return; // superseded by a seek or another track
+          const next = loaded.cover.tracks.find((t) => t.n === n + 1);
+          const { missing } = next
+            ? Album.trackParts(loaded.cover, loaded.parts, next.n)
+            : { missing: [1] };
+          np.base = np.dur; // finished, so the playhead sits at the end
+          np.playing = false;
           stop();
+          if (next && !missing.length) playTrack(next.n, 0);
         };
-        np = { n, track, dur: buf.duration, startedAt: actx.currentTime };
-        src.start();
+        src = mine;
+        np = {
+          n,
+          track,
+          spans,
+          dur: buf.duration,
+          base: Math.max(0, Math.min(offset, buf.duration - 0.01)),
+          startedAt: actx.currentTime,
+          playing: true,
+        };
+        mine.start(0, np.base);
         $("pplay").disabled = false;
         $("pplay").textContent = "stop";
         $("npTitle").textContent = track.title;
@@ -664,24 +880,46 @@
         tick();
       }
 
+      function now() {
+        if (!np) return 0;
+        return Math.min(
+          np.dur,
+          np.playing ? np.base + (actx.currentTime - np.startedAt) : np.base,
+        );
+      }
+
       function tick() {
         if (!np) return;
-        const t = Math.min(np.dur, actx.currentTime - np.startedAt);
-        $("npProg").value = t / np.dur;
+        const t = now();
+        if (!dragging) $("npSeek").value = Math.round((t / np.dur) * 1000);
         $("npTime").textContent =
           Album.fmtTime(t) + " / " + Album.fmtTime(np.dur);
+
+        // which image is being read right now, and how far into it
+        const i = Album.spanAt(np.spans, t);
+        const span = np.spans[i];
+        if (span) {
+          showPart(span);
+          const rev = revs.get(span.ref.track + ":" + span.ref.part);
+          if (rev && shownKey === span.ref.track + ":" + span.ref.part)
+            rev.seek((t - span.start) / Math.max(0.001, span.end - span.start));
+        }
+
         const lines = np.track.lyrics || [];
         if (!lines.length) return;
-        const i = Album.lyricAt(lines, t * 1000);
-        const box = $("lyrics");
-        const kids = box.children;
+        const li = Album.lyricAt(lines, t * 1000);
+        const box = $("lyrics"),
+          kids = box.children;
         for (let k = 0; k < kids.length; k++)
-          kids[k].classList.toggle("now", k === i);
-        if (i >= 0 && kids[i] && box.scrollHeight > box.clientHeight) {
-          const el = kids[i];
-          const want = el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2;
-          box.scrollTo({ top: Math.max(0, want), behavior: "smooth" });
-        }
+          kids[k].classList.toggle("now", k === li);
+        if (li >= 0 && kids[li] && box.scrollHeight > box.clientHeight)
+          box.scrollTo({
+            top: Math.max(
+              0,
+              kids[li].offsetTop - box.clientHeight / 2 + kids[li].offsetHeight / 2,
+            ),
+            behavior: "smooth",
+          });
       }
 
       function renderLyrics(track) {
@@ -689,10 +927,7 @@
         box.innerHTML = "";
         const lines = track.lyrics || [];
         if (!lines.length) {
-          const d = document.createElement("div");
-          d.className = "none";
-          d.textContent = "no lyrics for this track";
-          box.appendChild(d);
+          box.innerHTML = '<div class="dim">no lyrics for this track</div>';
           return;
         }
         for (const l of lines) {
@@ -702,15 +937,32 @@
         }
       }
 
+      // ---- transport --------------------------------------------
       $("pplay").addEventListener("click", () => {
-        if (src) {
-          if (np) np.stopped = true;
-          stop();
-        } else if (np) {
-          np.stopped = false;
-          playTrack(np.n);
+        if (src) stop(); // stop() remembers where we were
+        else if (np) playTrack(np.n, np.base < np.dur - 0.02 ? np.base : 0);
+      });
+      $("npSeek").addEventListener("pointerdown", () => (dragging = true));
+      $("npSeek").addEventListener("input", () => {
+        if (!np) return;
+        const t = (+$("npSeek").value / 1000) * np.dur;
+        $("npTime").textContent =
+          Album.fmtTime(t) + " / " + Album.fmtTime(np.dur);
+      });
+      $("npSeek").addEventListener("change", () => {
+        dragging = false;
+        if (!np) return;
+        const t = (+$("npSeek").value / 1000) * np.dur;
+        if (src) playTrack(np.n, t);
+        else {
+          np.base = t;
+          resetReveals(); // seeking back re-encodes the images
+          tick();
         }
       });
+
+      $("ppickFiles").addEventListener("click", () => $("pfiles").click());
+      $("ppickDir").addEventListener("click", () => $("pdir").click());
       $("pfiles").addEventListener("change", (e) => takePlayFiles(e.target.files));
       $("pdir").addEventListener("change", (e) => takePlayFiles(e.target.files));
       wireDrop($("pdrop"), takePlayFiles);
