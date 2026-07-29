@@ -64,6 +64,13 @@ data. The sandbox also blocks the cartridge's own `localStorage`, so the
 player injects a shim: cartridge apps that use plain `localStorage` keep
 working, their data saved per cartridge and deleted with it.
 
+## Sub-projects
+
+- [audio-console](audio-console/) — builds and plays albums: songs split
+  across one or more images per track, with a cover cartridge holding
+  metadata, ownership, timestamped lyrics, and the key that decrypts the
+  tracks.
+
 ---
 
 `lib/steg-core.js` is vendored from `stegassette/lib/steg-core.js` — re-copy
