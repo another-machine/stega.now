@@ -207,28 +207,49 @@ const Album = (() => {
   }
 
   // ---- lyrics ------------------------------------------------
-  // LRC: [mm:ss.xx] line — several stamps may share one line.
+  // LRC: [mm:ss.xx] line — several stamps may share one line. Enhanced LRC
+  // also times individual words inline, <mm:ss.xx> before each one:
+  //   [00:12.00]<00:12.00>Hello <00:12.60>world
+  // Word times are kept when a line carries a single stamp; with repeats
+  // there is no telling which occurrence they belong to.
+  function stampMs(mm, ss, frac) {
+    // the fraction is centiseconds at two digits, milliseconds at three
+    const f = frac || "";
+    const ms = f
+      ? f.length >= 3
+        ? parseInt(f.slice(0, 3), 10)
+        : parseInt(f, 10) * 10
+      : 0;
+    return (+mm * 60 + +ss) * 1000 + ms;
+  }
   function parseLrc(text) {
     const out = [];
     for (const raw of String(text).split(/\r?\n/)) {
       const stamps = [...raw.matchAll(/\[(\d+):(\d+)(?:[.:](\d+))?\]/g)];
       if (!stamps.length) continue;
-      const line = raw.replace(/\[[^\]]*\]/g, "").trim();
-      if (!line) continue;
-      for (const m of stamps) {
-        // the fraction is centiseconds at two digits, milliseconds at three
-        const f = m[3] || "";
-        const frac = f
-          ? f.length >= 3
-            ? parseInt(f.slice(0, 3), 10)
-            : parseInt(f, 10) * 10
-          : 0;
-        out.push({ t: (+m[1] * 60 + +m[2]) * 1000 + frac, line });
+      const body = raw.replace(/\[[^\]]*\]/g, "");
+      const words = [];
+      for (const w of body.matchAll(/<(\d+):(\d+)(?:[.:](\d+))?>([^<]*)/g)) {
+        const text = w[4].trim();
+        if (text) words.push({ t: stampMs(w[1], w[2], w[3]), text });
       }
+      const line = body
+        .replace(/<[^>]*>/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!line) continue;
+      const timed = stamps.length === 1 && words.length ? words : null;
+      for (const m of stamps)
+        out.push({
+          t: stampMs(m[1], m[2], m[3]),
+          line,
+          ...(timed ? { words: timed } : {}),
+        });
     }
     return out.sort((a, b) => a.t - b.t);
   }
-  // index of the line that should be lit at `ms`, or -1 before the first
+  // index of the line (or word) that should be lit at `ms`, -1 before the
+  // first; anything with a `t` works
   function lyricAt(lyrics, ms) {
     if (!lyrics || !lyrics.length) return -1;
     let lo = 0,

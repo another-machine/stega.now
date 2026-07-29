@@ -75,13 +75,28 @@ allowed:
 [00:16.00]the second
 ```
 
+Enhanced LRC times individual words too — `<mm:ss.xx>` before each — and the
+player lights them one at a time as they arrive:
+
+```
+[00:12.50]<00:12.50>the <00:12.90>first <00:13.40>line
+```
+
+Word times are kept when a line carries a single stamp; with repeated stamps
+there is no telling which occurrence they belong to.
+
 ## Play
 
 Drop the album folder. The player reads every cartridge, finds the cover,
 takes the key from it, and shows the album: artwork, metadata, ownership, and
 a track list with the parts it found. Click a track to decrypt and play it;
-the album then plays through. Lyrics scroll inline, the current line lit from
-the playhead.
+the album then plays through.
+
+Lyrics run as a **stream** — the line being sung with its neighbours either
+side, swapping in place so nothing scrolls out from under you. Where a line
+has word timings, its words light up one by one. `raw lyrics` opens the whole
+thing with timestamps to read, following the playhead but only moving when the
+line changes.
 
 Images play **in sequence as they load**. The first one starts as soon as it is
 decrypted and the rest are queued onto the audio clock while it plays, so a

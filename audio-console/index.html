@@ -95,19 +95,51 @@
         width: 130px;
         display: block;
       }
+      /* the lyrics as a stream: fixed lines that swap, so nothing scrolls
+         out from under you while you are watching it */
       #lyrics {
-        max-height: 34vh;
-        overflow: auto;
+        min-width: 240px;
         margin: 4px 0;
-        min-width: 220px;
       }
-      #lyrics div {
-        opacity: 0.45;
+      #lstream .prev,
+      #lstream .next {
+        opacity: 0.4;
+        min-height: 1.4em;
+      }
+      #lstream .now {
+        font-size: 14px;
+        min-height: 1.5em;
+        margin: 2px 0;
+        font-weight: bold;
+      }
+      /* per-word timing: words arrive as they are sung */
+      #lstream .now span {
+        opacity: 0.4;
+      }
+      #lstream .now span.on {
+        opacity: 1;
+      }
+      #lraw {
+        max-height: 30vh;
+        overflow: auto;
+        margin-top: 6px;
+        border-top: 1px solid;
+        padding-top: 4px;
+        /* positioned, so a line's offsetTop is measured from this box and not
+           from the page — otherwise centring a line pins it to the bottom */
+        position: relative;
+      }
+      #lraw div {
+        opacity: 0.55;
         padding: 1px 0;
       }
-      #lyrics div.now {
+      #lraw div.now {
         opacity: 1;
         font-weight: bold;
+      }
+      #lraw .tm {
+        opacity: 0.5;
+        margin-right: 6px;
       }
       .cols {
         display: flex;
@@ -361,7 +393,18 @@
             <div id="revBox"></div>
             <div class="dim" id="revLabel"></div>
           </div>
-          <div id="lyrics"></div>
+          <div id="lyrics">
+            <div id="lstream">
+              <div class="prev"></div>
+              <div class="now"></div>
+              <div class="next"></div>
+            </div>
+            <div class="row">
+              <button id="lrawToggle">raw lyrics</button>
+              <span id="lcount" class="dim"></span>
+            </div>
+            <div id="lraw" hidden></div>
+          </div>
         </div>
 
         <fieldset>
@@ -1193,35 +1236,91 @@
             rev.seek((t - span.start) / Math.max(0.001, span.end - span.start));
         }
 
-        const lines = np.track.lyrics || [];
-        if (!lines.length) return;
-        const li = Album.lyricAt(lines, t * 1000);
-        const box = $("lyrics"),
-          kids = box.children;
-        for (let k = 0; k < kids.length; k++)
-          kids[k].classList.toggle("now", k === li);
-        if (li >= 0 && kids[li] && box.scrollHeight > box.clientHeight)
-          box.scrollTo({
-            top: Math.max(
-              0,
-              kids[li].offsetTop - box.clientHeight / 2 + kids[li].offsetHeight / 2,
-            ),
-            behavior: "smooth",
-          });
+        updateLyrics(t);
       }
 
+      // The stream shows the line being sung with its neighbours either side;
+      // the raw list is the whole thing to read, on demand.
+      let lyricLine = -2; // last line put on the stream
       function renderLyrics(track) {
-        const box = $("lyrics");
-        box.innerHTML = "";
         const lines = track.lyrics || [];
-        if (!lines.length) {
-          box.innerHTML = '<div class="dim">no lyrics for this track</div>';
-          return;
-        }
-        for (const l of lines) {
+        lyricLine = -2;
+        const st = $("lstream");
+        st.querySelector(".prev").textContent = "";
+        st.querySelector(".next").textContent = "";
+        st.querySelector(".now").textContent = lines.length
+          ? ""
+          : "no lyrics for this track";
+        const timed = lines.some((l) => l.words && l.words.length);
+        $("lcount").textContent = lines.length
+          ? lines.length + " lines" + (timed ? " · timed per word" : "")
+          : "";
+        $("lrawToggle").hidden = !lines.length;
+        const raw = $("lraw");
+        raw.innerHTML = "";
+        lines.forEach((l, i) => {
           const d = document.createElement("div");
-          d.textContent = l.line;
-          box.appendChild(d);
+          d.dataset.i = i;
+          const tm = document.createElement("span");
+          tm.className = "tm";
+          tm.textContent = Album.fmtTime(l.t / 1000);
+          d.append(tm, document.createTextNode(l.line));
+          raw.appendChild(d);
+        });
+      }
+
+      function updateLyrics(t) {
+        const lines = np.track.lyrics || [];
+        if (!lines.length) return;
+        const ms = t * 1000;
+        const i = Album.lyricAt(lines, ms);
+        const st = $("lstream");
+        const now = st.querySelector(".now");
+
+        if (i !== lyricLine) {
+          lyricLine = i;
+          st.querySelector(".prev").textContent =
+            i > 0 ? lines[i - 1].line : "";
+          st.querySelector(".next").textContent =
+            i + 1 < lines.length ? lines[i + 1].line : "";
+          now.textContent = "";
+          const cur = i >= 0 ? lines[i] : null;
+          if (cur && cur.words && cur.words.length) {
+            // one span per word, lit as its moment arrives
+            for (const w of cur.words) {
+              const s = document.createElement("span");
+              s.textContent = w.text + " ";
+              s.dataset.t = w.t;
+              now.appendChild(s);
+            }
+          } else if (cur) {
+            const s = document.createElement("span");
+            s.className = "on";
+            s.textContent = cur.line;
+            now.appendChild(s);
+          }
+          // the raw list only moves when the line changes — re-issuing a
+          // smooth scroll every tick restarted it before it could settle
+          const raw = $("lraw");
+          if (!raw.hidden) {
+            raw.querySelectorAll("div").forEach((d) =>
+              d.classList.toggle("now", +d.dataset.i === i),
+            );
+            const el = raw.querySelector("div.now");
+            if (el && raw.scrollHeight > raw.clientHeight)
+              raw.scrollTop = Math.max(
+                0,
+                el.offsetTop - raw.clientHeight / 2 + el.offsetHeight / 2,
+              );
+          }
+        }
+
+        const cur = i >= 0 ? lines[i] : null;
+        if (cur && cur.words && cur.words.length) {
+          const w = Album.lyricAt(cur.words, ms);
+          const spans = now.children;
+          for (let k = 0; k < spans.length; k++)
+            spans[k].classList.toggle("on", k <= w);
         }
       }
 
@@ -1263,6 +1362,12 @@
           $("reencodeNote").textContent = "✗ " + err.message;
         }
         $("reencode").disabled = false;
+      });
+      $("lrawToggle").addEventListener("click", () => {
+        const raw = $("lraw");
+        raw.hidden = !raw.hidden;
+        $("lrawToggle").textContent = raw.hidden ? "raw lyrics" : "hide raw";
+        lyricLine = -2; // so the highlight lands on the next update
       });
       $("npVol").addEventListener("input", () => {
         if (master) master.gain.value = +$("npVol").value / 100;
