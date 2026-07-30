@@ -158,20 +158,28 @@ const Album = (() => {
       Math.ceil((srcImg.width * srcImg.height) / 2),
       aspect,
     );
+    const opts = {
+      combine: steg.combine,
+      keyMap: steg.keyMap,
+      traversal: steg.traversal,
+      params: {},
+    };
+    // the width the header itself needs; a small payload would otherwise
+    // size the canvas below it and encoding would refuse
+    const minWidth = StegCore.stgcHeaderWidth(opts);
     const capacity =
       StegCore.dataPixelCount(
         srcImg.width - 2 * nativeB,
         srcImg.height - 2 * nativeB,
       ) * 3;
-    const fits = capacity >= total && srcImg.width > 96;
+    const fits = capacity >= total && srcImg.width >= minWidth;
     const useB = fits ? nativeB : B;
-    const scaled = fits ? srcImg : StegCore.autoScaleImg(srcImg, total, B, null, 3);
+    const scaled = fits
+      ? srcImg
+      : StegCore.autoScaleImg(srcImg, total, B, null, 3, minWidth);
     const out = StegCore.encodeContainer(entries, scaled, scaled, {
-      combine: steg.combine,
-      traversal: steg.traversal,
-      keyMap: steg.keyMap,
+      ...opts,
       borderWidth: useB,
-      params: {},
     });
     return { blob: await imgToPngBlob(out), width: out.width, height: out.height };
   }
