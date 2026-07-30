@@ -45,10 +45,10 @@ const Me = (() => {
     pack: "packed",
   };
   const METHODS = {
-    combine: StegCore.COMBINE_NAMES,
-    traversal: StegCore.TRAVERSAL_NAMES,
-    keymap: StegCore.KEYMAP_NAMES,
-    pack: StegCore.PACK_NAMES,
+    combine: Stegassette.COMBINE_NAMES,
+    traversal: Stegassette.TRAVERSAL_NAMES,
+    keymap: Stegassette.KEYMAP_NAMES,
+    pack: Stegassette.PACK_NAMES,
   };
 
   // 8 or 16 bit. A voice at 8 bit is grainy and half the pixels — which is
@@ -214,7 +214,7 @@ const Me = (() => {
     const W = bmp.width,
       H = bmp.height;
     bmp.close();
-    return new StegCore.Img(
+    return new Stegassette.Img(
       W,
       H,
       new Uint8Array(ctx.getImageData(0, 0, W, H).data),
@@ -310,8 +310,8 @@ const Me = (() => {
     minWidth = 0,
   }) {
     const dataPx = Math.max(1, Math.ceil(bytes / bpp));
-    let B = StegCore.resolveBorderWidth(border, dataPx, aspect);
-    const { IW, IH } = StegCore.interiorDims(dataPx, aspect, B);
+    let B = Stegassette.resolveBorderWidth(border, dataPx, aspect);
+    const { IW, IH } = Stegassette.interiorDims(dataPx, aspect, B);
     let W = IW + 2 * B,
       H = IH + 2 * B;
     const grow = Math.max(
@@ -327,7 +327,7 @@ const Me = (() => {
     // rounding can leave the interior a few pixels short of the payload
     let guard = 0;
     while (
-      StegCore.dataPixelCount(W - 2 * B, H - 2 * B) * bpp < bytes &&
+      Stegassette.dataPixelCount(W - 2 * B, H - 2 * B) * bpp < bytes &&
       guard++ < 4096
     ) {
       W++;
@@ -337,16 +337,11 @@ const Me = (() => {
   }
 
   // ---- the core's moving parts -------------------------------
-  // lib/steg-core.js is a flattened copy of @amplib/steganography's Stegassette
-  // module, and the copy lags the package. Two seams are worth not depending on
-  // the exact vintage for, since both fail quietly rather than loudly:
-  //
-  //   the keymap option  the package spells it `keymap`, the vendored copy
-  //                      `keyMap`. A core reading the other spelling doesn't
-  //                      throw, it silently encodes with `adjacent` — so every
-  //                      call here sends both.
-  //   the header floor   the vendored copy exports stgcHeaderWidth(); the
-  //                      package keeps that calculation internal.
+  // The codec is now @amplib/steganography itself (lib/stegassette.js), not a
+  // flattened copy of it. This file still uses `keyMap` as its own internal
+  // spelling, so every call into the codec sends BOTH spellings: the package
+  // reads `keymap` and throws if it sees only `keyMap`, which is the loud
+  // failure that replaced the old silent fall-back to `adjacent`.
   const bothKeymaps = (keyMap) => ({ keyMap, keymap: keyMap });
 
   // The width below which the header has nowhere to live. Derived from the
@@ -355,17 +350,21 @@ const Me = (() => {
   // has room either way — one border row holds the raw-byte layout, and the
   // ring of a canvas that wide is many times the nibble layout's need.
   function headerFloor(opts) {
-    if (StegCore.stgcHeaderWidth) return StegCore.stgcHeaderWidth(opts);
+    if (Stegassette.stgcHeaderWidth)
+      return Stegassette.stgcHeaderWidth({
+        ...opts,
+        ...bothKeymaps(opts.keymap || opts.keyMap || "adjacent"),
+      });
     const plan = opts.plan;
     const params = { ...(opts.params || {}) };
     if ((opts.traversal || "raster") === "fisher-yates" && params.seed == null)
       params.seed = 0xffffffff; // the widest seed, so this stays a floor
     // an unrecognised plan is treated as non-default, which only over-estimates
-    const isDefault = StegCore.isDefaultPlan
-      ? StegCore.isDefaultPlan(plan)
+    const isDefault = Stegassette.isDefaultPlan
+      ? Stegassette.isDefaultPlan(plan)
       : false;
     return (
-      StegCore.packStgcHeader({
+      Stegassette.packStgcHeader({
         combine: opts.combine || "xor",
         ...bothKeymaps(opts.keyMap || "adjacent"),
         traversal: opts.traversal || "raster",
@@ -375,7 +374,7 @@ const Me = (() => {
         ch:
           isDefault || (plan && plan.broadcast)
             ? undefined
-            : StegCore.serializeChannelPlan(plan.slots),
+            : Stegassette.serializeChannelPlan(plan.slots),
         pad: plan ? plan.pad : 0,
         pack: plan ? plan.pack : "packed",
       }).length + 2
@@ -383,10 +382,10 @@ const Me = (() => {
   }
 
   // The entry table's own size, which is what an aligned channel plan pads
-  // against. Mirrors steg-core's internal _tableSize (the package exports it as
-  // entryTableSize; the vendored copy keeps it private).
+  // against. The package exports this as entryTableSize; the local fallback is
+  // kept for the case where an older codec is loaded.
   function tableSize(entries) {
-    if (StegCore.entryTableSize) return StegCore.entryTableSize(entries);
+    if (Stegassette.entryTableSize) return Stegassette.entryTableSize(entries);
     let n = 0;
     for (const e of entries)
       n +=
@@ -407,7 +406,7 @@ const Me = (() => {
       { mimetype: "audio/L16; rate=00000; channels=0", name: "voice" },
       { mimetype: "application/json", name: INFO_ENTRY },
     ];
-    const cplan = StegCore.normalizeChannelPlan(
+    const cplan = Stegassette.normalizeChannelPlan(
       { combine: steg.combine, pack: steg.pack },
       bits >> 3,
       tableSize(fake),
@@ -431,7 +430,7 @@ const Me = (() => {
     // payload are never written, so they are already developed when playback
     // starts — a cartridge sized well past its sound only animates a strip of
     // itself. Worth knowing before it is made rather than after.
-    const room = StegCore.dataPixelCount(dims.W - 2 * dims.B, dims.H - 2 * dims.B);
+    const room = Stegassette.dataPixelCount(dims.W - 2 * dims.B, dims.H - 2 * dims.B);
     const fill = Math.min(1, Math.ceil(bytes / bpp) / Math.max(1, room));
     return { ...dims, bpp, bytes, pcmBytes, frames, fill, pack: cplan.pack };
   }
@@ -651,11 +650,11 @@ const Me = (() => {
     onProgress("laying out the sound", 0.1);
     const mixed = audio.channels.map((c) => new Float32Array(c));
     if (normalize.on)
-      StegCore.peakNormalize(mixed, {
+      Stegassette.peakNormalize(mixed, {
         targetDb: Number.isFinite(normalize.db) ? Math.min(0, normalize.db) : -1,
       });
-    const pcm = StegCore.float32ToPcm(
-      StegCore.layoutChannels({ mixed, layout: chLayout }),
+    const pcm = Stegassette.float32ToPcm(
+      Stegassette.layoutChannels({ mixed, layout: chLayout }),
       bits,
     );
     const nFrames = mixed[0].length;
@@ -699,7 +698,7 @@ const Me = (() => {
     // develops the picture while it plays.
     const entries = [
       {
-        mimetype: StegCore.buildAudioMime({
+        mimetype: Stegassette.buildAudioMime({
           bits,
           rate: audio.rate,
           channels: mixed.length,
@@ -715,12 +714,12 @@ const Me = (() => {
       },
     ];
 
-    const cplan = StegCore.normalizeChannelPlan(
+    const cplan = Stegassette.normalizeChannelPlan(
       { combine: method.combine, pack: method.pack },
       bits >> 3,
       tableSize(entries),
     );
-    const total = StegCore.containerInteriorBytes(entries) + cplan.pad;
+    const total = Stegassette.containerInteriorBytes(entries) + cplan.pad;
     const { W, H, B } = planCanvas({
       bytes: total,
       bpp: cplan.bytesPerPixel,
@@ -741,7 +740,7 @@ const Me = (() => {
       gap: layout.gap,
       matte: layout.matte,
     });
-    const carrier = new StegCore.Img(
+    const carrier = new Stegassette.Img(
       W,
       H,
       new Uint8Array(
@@ -752,14 +751,22 @@ const Me = (() => {
 
     onProgress("hiding the sound in it", 0.55);
     await tick();
-    const out = StegCore.encodeContainer(entries, carrier, carrier, {
-      combine: method.combine,
-      traversal: method.traversal,
-      ...bothKeymaps(method.keyMap),
-      borderWidth: B,
-      params: {},
-      plan: cplan,
-    });
+    // (entries, srcImg, opts, keyImg) — opts is the THIRD argument here, where
+    // the old vendored core took the key image there. Self-keying, so the same
+    // image is both.
+    const out = Stegassette.encodeContainer(
+      entries,
+      carrier,
+      {
+        combine: method.combine,
+        traversal: method.traversal,
+        ...bothKeymaps(method.keyMap),
+        borderWidth: B,
+        params: {},
+        plan: cplan,
+      },
+      carrier,
+    );
 
     onProgress("writing the cartridge", 0.85);
     await tick();
@@ -781,7 +788,7 @@ const Me = (() => {
   // isn't fatal: the sound and the picture are still there.
   async function read(blob) {
     const img = await imgFromBlob(blob);
-    const { entries, opts } = StegCore.decodeContainer(img, img);
+    const { entries, opts } = Stegassette.decodeContainer(img, img);
     // lib/reveal.js — and the player here — read opts.keyMap; a core synced from
     // @amplib/steganography reports opts.keymap. Carry both, or the reveal
     // quietly clears the wrong key pixels under `adjacent`.
@@ -802,9 +809,9 @@ const Me = (() => {
 
   // A PCM entry as channel data, ready for an AudioBuffer.
   function audioOf(entry) {
-    const fmt = StegCore.parseAudioMime(entry.mimetype);
-    const planar = StegCore.unlayoutChannels({
-      f32: StegCore.toFloat32(entry.data, fmt.bits),
+    const fmt = Stegassette.parseAudioMime(entry.mimetype);
+    const planar = Stegassette.unlayoutChannels({
+      f32: Stegassette.toFloat32(entry.data, fmt.bits),
       layout: fmt.layout,
       channels: fmt.channels,
       blockSize: fmt.blockSize,

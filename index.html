@@ -220,14 +220,14 @@
       <p id="err"></p>
     </div>
 
-    <script src="lib/steg-core.js"></script>
+    <script src="lib/stegassette.js"></script>
     <script src="lib/reveal.js"></script>
     <script>
       "use strict";
-      console.log("stegassette codec " + StegCore.CODEC_VERSION);
+      console.log("stegassette codec " + Stegassette.CODEC_VERSION);
       /* ==========================================================
          stega-now — playback for stegassette STGC cartridge PNGs.
-         Decodes in-browser via steg-core and plays back entries:
+         Decodes in-browser via @amplib/steganography and plays back entries:
            text/html → sandboxed full-viewport app
            text/*    → text
            image/*   → image
@@ -454,18 +454,18 @@
         ctx.drawImage(bmp, 0, 0);
         bmp.close();
         const px = ctx.getImageData(0, 0, W, H).data;
-        return new StegCore.Img(W, H, new Uint8Array(px));
+        return new Stegassette.Img(W, H, new Uint8Array(px));
       }
       async function decodeBytes(bytes) {
         const img = await toImg(bytes);
         // the Img is kept so playback can animate the decode (see buildReveal)
-        return { ...StegCore.decodeContainer(img, img), img };
+        return { ...Stegassette.decodeContainer(img, img), img };
       }
       // Check a file really is a cartridge without paying for a full decode:
       // the STGC header lives in the border alpha, so reading it costs
       // nothing next to walking the whole interior. Throws if it isn't one.
       async function checkCartridge(bytes) {
-        StegCore.unpackStgcHeaderAlpha(await toImg(bytes));
+        Stegassette.unpackStgcHeaderAlpha(await toImg(bytes));
       }
 
       function kindOf(mimetype) {
@@ -566,9 +566,9 @@
       }
 
       function buildPcmPlayer(e) {
-        const fmt = StegCore.parseAudioMime(e.mimetype);
-        const f32 = StegCore.toFloat32(e.data, fmt.bits);
-        const planar = StegCore.unlayoutChannels({
+        const fmt = Stegassette.parseAudioMime(e.mimetype);
+        const f32 = Stegassette.toFloat32(e.data, fmt.bits);
+        const planar = Stegassette.unlayoutChannels({
           f32,
           layout: fmt.layout,
           channels: fmt.channels,
@@ -915,7 +915,7 @@
         let note = null;
         if (!audio.every(Boolean)) note = "not every part carries PCM audio";
         else {
-          const f = audio.map((e) => StegCore.parseAudioMime(e.mimetype));
+          const f = audio.map((e) => Stegassette.parseAudioMime(e.mimetype));
           if (
             !f.every((x) => x.rate === f[0].rate && x.channels === f[0].channels)
           )
@@ -923,8 +923,8 @@
           else
             parts.forEach((p, i) => {
               p.fmt = f[i];
-              p.planar = StegCore.unlayoutChannels({
-                f32: StegCore.toFloat32(audio[i].data, f[i].bits),
+              p.planar = Stegassette.unlayoutChannels({
+                f32: Stegassette.toFloat32(audio[i].data, f[i].bits),
                 layout: f[i].layout,
                 channels: f[i].channels,
                 blockSize: f[i].blockSize,

@@ -33,14 +33,14 @@ const Album = (() => {
   const STEG = {
     combine: "veil",
     traversal: "hilbert",
-    keyMap: "adjacent",
+    keymap: "adjacent",
     border: 0.02,
   };
   // the methods a build can choose from, straight out of the format
   const METHODS = {
-    combine: StegCore.COMBINE_NAMES,
-    traversal: StegCore.TRAVERSAL_NAMES,
-    keymap: StegCore.KEYMAP_NAMES,
+    combine: Stegassette.COMBINE_NAMES,
+    traversal: Stegassette.TRAVERSAL_NAMES,
+    keymap: Stegassette.KEYMAP_NAMES,
   };
 
   const enc = new TextEncoder();
@@ -116,7 +116,7 @@ const Album = (() => {
     const ctx = cnv.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(bmp, 0, 0);
     bmp.close();
-    return new StegCore.Img(
+    return new Stegassette.Img(
       W,
       H,
       new Uint8Array(ctx.getImageData(0, 0, W, H).data),
@@ -149,26 +149,30 @@ const Album = (() => {
   // the payload — scaling it down to the exact fit would turn an album
   // cover into a thumbnail. It is only resized when it is too small.
   async function encodeCartridge(entries, srcImg, steg = STEG) {
-    const total = StegCore.containerInteriorBytes(entries);
+    const total = Stegassette.containerInteriorBytes(entries);
     const aspect = srcImg.width / srcImg.height;
     const dataPx = Math.ceil(total / 3);
-    const B = StegCore.resolveBorderWidth(steg.border, dataPx, aspect);
-    const nativeB = StegCore.resolveBorderWidth(
+    const B = Stegassette.resolveBorderWidth(steg.border, dataPx, aspect);
+    const nativeB = Stegassette.resolveBorderWidth(
       steg.border,
       Math.ceil((srcImg.width * srcImg.height) / 2),
       aspect,
     );
+    // `keymap`, not `keyMap`. The package throws on the old spelling rather
+    // than silently defaulting to "adjacent", which is what it used to do.
+    // Albums built before the rename persisted `keyMap` into album.json, so
+    // accept either here — this is the one place old records flow back in.
     const opts = {
       combine: steg.combine,
-      keyMap: steg.keyMap,
+      keymap: steg.keymap || steg.keyMap || "adjacent",
       traversal: steg.traversal,
       params: {},
     };
     // the width the header itself needs; a small payload would otherwise
     // size the canvas below it and encoding would refuse
-    const minWidth = StegCore.stgcHeaderWidth(opts);
+    const minWidth = Stegassette.stgcHeaderWidth(opts);
     const capacity =
-      StegCore.dataPixelCount(
+      Stegassette.dataPixelCount(
         srcImg.width - 2 * nativeB,
         srcImg.height - 2 * nativeB,
       ) * 3;
@@ -179,16 +183,21 @@ const Album = (() => {
     const evenSrc =
       srcImg.width % 2 === 0
         ? srcImg
-        : StegCore.cropImg(srcImg, 0, 0, srcImg.width - 1, srcImg.height);
+        : Stegassette.cropImg(srcImg, 0, 0, srcImg.width - 1, srcImg.height);
     const fits = capacity >= total && evenSrc.width >= minWidth;
     const useB = fits ? nativeB : B;
     const scaled = fits
       ? evenSrc
-      : StegCore.autoScaleImg(srcImg, total, B, null, 3, minWidth);
-    const out = StegCore.encodeContainer(entries, scaled, scaled, {
-      ...opts,
-      borderWidth: useB,
-    });
+      : Stegassette.autoScaleImg(srcImg, total, B, null, 3, minWidth);
+    // (entries, srcImg, opts, keyImg) — opts is the THIRD argument here, where
+    // the old vendored core took the key image there. Self-keying, so the same
+    // image is both.
+    const out = Stegassette.encodeContainer(
+      entries,
+      scaled,
+      { ...opts, borderWidth: useB },
+      scaled,
+    );
     return { blob: await imgToPngBlob(out), width: out.width, height: out.height };
   }
 
@@ -295,7 +304,7 @@ const Album = (() => {
   // ---- build -------------------------------------------------
   // tracks: [{ file, title, lyrics }]  carriers: [Blob] (cycled)
   // audio:  { rate, bits, channels }   partsPerTrack: n
-  // steg:   { combine, traversal, keyMap, border }
+  // steg:   { combine, traversal, keymap, border }
   // normalize: { mode: "album" | "track" | "off", db }
   //   album — one shared gain, so the loudest moment on the record hits the
   //           target and the tracks keep their relative loudness
@@ -368,7 +377,7 @@ const Album = (() => {
         audio.channels,
       );
       if (norm.mode === "track")
-        StegCore.peakNormalize(channels, { targetDb: norm.db });
+        Stegassette.peakNormalize(channels, { targetDb: norm.db });
       else if (norm.mode === "album" && albumGain !== 1)
         for (const c of channels)
           for (let i = 0; i < c.length; i++) c[i] *= albumGain;
@@ -384,8 +393,8 @@ const Album = (() => {
           f1 = Math.min(frames, f0 + perPart);
         if (f1 <= f0) continue;
         const slice = channels.map((c) => c.subarray(f0, f1));
-        const chunk = StegCore.float32ToPcm(
-          StegCore.layoutChannels({ mixed: slice, layout }),
+        const chunk = Stegassette.float32ToPcm(
+          Stegassette.layoutChannels({ mixed: slice, layout }),
           audio.bits,
         );
         pcmBytes += chunk.length;
@@ -423,7 +432,7 @@ const Album = (() => {
             // Always raw PCM, encrypted or not. A track image is an audio
             // cartridge wherever it turns up: with the cover it is the
             // music, without it the ciphertext plays as the noise it is.
-            mimetype: StegCore.buildAudioMime({
+            mimetype: Stegassette.buildAudioMime({
               bits: audio.bits,
               rate: audio.rate,
               channels: audio.channels,
@@ -530,7 +539,7 @@ const Album = (() => {
       onProgress(`reading ${f.name}`, i / files.length);
       try {
         const img = await imgFromBlob(f);
-        const { entries, opts } = StegCore.decodeContainer(img, img);
+        const { entries, opts } = Stegassette.decodeContainer(img, img);
         const cj = entries.find((e) => e.name === COVER_ENTRY);
         if (cj) {
           cover = JSON.parse(dec.decode(cj.data));
@@ -622,8 +631,8 @@ const Album = (() => {
   // for the locked case where the bytes are ciphertext — then this is what
   // the encrypted audio sounds like, which is noise.
   function bytesToChannels(bytes, fmt) {
-    const planar = StegCore.unlayoutChannels({
-      f32: StegCore.toFloat32(bytes, fmt.bits),
+    const planar = Stegassette.unlayoutChannels({
+      f32: Stegassette.toFloat32(bytes, fmt.bits),
       layout: fmt.layout,
       channels: fmt.channels,
       blockSize: 0,
@@ -729,15 +738,15 @@ const Album = (() => {
       const p = ordered[i];
       onProgress(`re-encoding ${p.track}/${p.part}`, i / ordered.length);
       const img = await imgFromBlob(p.blob);
-      const { entries, opts } = StegCore.decodeContainer(img, img);
-      const pathIdx = StegCore.getPathIndices(
+      const { entries, opts } = Stegassette.decodeContainer(img, img);
+      const pathIdx = Stegassette.getPathIndices(
         img.width - 2 * (opts.borderWidth || 1),
         img.height - 2 * (opts.borderWidth || 1),
         opts.traversal,
         opts.params || {},
       );
       // the cover art as recovered from this cartridge, at full size
-      const rec = StegCore.computeRecon(img, pathIdx, opts);
+      const rec = Stegassette.computeRecon(img, pathIdx, opts);
       const small = Object.assign(document.createElement("canvas"), {
         width: rec.width,
         height: rec.height,
@@ -751,7 +760,7 @@ const Album = (() => {
       });
       const fc = full.getContext("2d", { willReadFrequently: true });
       fc.drawImage(small, 0, 0, img.width, img.height);
-      const carrier = new StegCore.Img(
+      const carrier = new Stegassette.Img(
         img.width,
         img.height,
         new Uint8Array(fc.getImageData(0, 0, img.width, img.height).data),
@@ -774,7 +783,7 @@ const Album = (() => {
           {
             mimetype: audioEntry
               ? audioEntry.mimetype
-              : StegCore.buildAudioMime(partFormat(album, p)),
+              : Stegassette.buildAudioMime(partFormat(album, p)),
             name: `t${pad(p.track, 2)}p${pad(p.part, 2)}`,
             data: clear,
           },

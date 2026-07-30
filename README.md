@@ -1,7 +1,7 @@
 # stega-now
 
 Playback for stegassette STGC cartridge PNGs. Static — `index.html` +
-`lib/steg-core.js`, serve anywhere.
+`lib/stegassette.js`, serve anywhere.
 
 Add a cartridge and stega-now decodes it in the browser and plays back
 whatever it holds:
@@ -73,8 +73,25 @@ working, their data saved per cartridge and deleted with it.
 - [me](me/) — a cartridge of you: record yourself, lay frames out in a
   template, and hide the recording's own audio in the picture — or record a
   message into images you already have.
+- [workout](workout/) — a band workout routine as a cartridge-ready page:
+  opens on today's session, tap exercises to mark them done, stopwatch in
+  the masthead. The program lives in [workout/ROUTINE.md](workout/ROUTINE.md).
 
 ---
 
-`lib/steg-core.js` is vendored from `stegassette/lib/steg-core.js` — re-copy
-it when the format changes.
+`lib/stegassette.js` is the codec, vendored from the library that publishes
+it:
+
+    curl -o lib/stegassette.js https://amplib.app/lib/stegassette.js
+
+It exposes `window.Stegassette` and comes from
+[@amplib/steganography](https://github.com/another-machine/public-library/tree/main/packages/amplib-steganography),
+built as a self-contained IIFE so these pages stay no-build. `npm run
+codec:check:remote` in the stegassette lab compares this copy against the
+published one and fails on drift.
+
+The API is not the same as the old vendored `steg-core.js` it replaced:
+`encodeContainer` takes `(entries, srcImg, opts, keyImg)` rather than
+`(entries, srcImg, keyImg, opts)`, and the keymap option is spelled
+`keymap`, not `keyMap` — the package throws on the old spelling rather
+than silently encoding with `adjacent`.

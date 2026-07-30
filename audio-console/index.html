@@ -419,7 +419,7 @@
       </div>
     </section>
 
-    <script src="../lib/steg-core.js"></script>
+    <script src="../lib/stegassette.js"></script>
     <script src="../lib/reveal.js"></script>
     <script src="album.js"></script>
     <script>
@@ -492,7 +492,7 @@
       for (const [id, list, def] of [
         ["sCombine", Album.METHODS.combine, Album.STEG.combine],
         ["sTraversal", Album.METHODS.traversal, Album.STEG.traversal],
-        ["sKeymap", Album.METHODS.keymap, Album.STEG.keyMap],
+        ["sKeymap", Album.METHODS.keymap, Album.STEG.keymap],
       ]) {
         $(id).innerHTML = list
           .map(
@@ -503,7 +503,7 @@
       const stegChoice = () => ({
         combine: $("sCombine").value,
         traversal: $("sTraversal").value,
-        keyMap: $("sKeymap").value,
+        keymap: $("sKeymap").value,
         border: parseFloat($("sBorder").value) || 0,
       });
       const normChoice = () => {
@@ -690,7 +690,7 @@
           $("bout").innerHTML =
             `<div class="row"><a href="${zipUrl}" download="${Album.slug(album.album.title)}-album.zip">` +
             `download album (${files.length} files, ${(total / 1048576).toFixed(1)} MB)</a>` +
-            `<span class="dim">${album.steg.combine} / ${album.steg.traversal} / ${album.steg.keyMap} · ` +
+            `<span class="dim">${album.steg.combine} / ${album.steg.traversal} / ${album.steg.keymap} · ` +
             `normalize: ${album.normalize.mode}${album.normalize.mode === "off" ? "" : " @ " + album.normalize.db + " dBFS"}</span></div>` +
             `<ul class="files">` +
             files
@@ -801,7 +801,7 @@
           .filter(Boolean)
           .join(" · ");
         $("methodMeta").textContent = [
-          a.steg && `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keyMap}`,
+          a.steg && `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keymap}`,
           a.normalize && `normalize: ${a.normalize.mode}`,
           a.encrypted === false
             ? "not encrypted — the images play on their own"
@@ -934,7 +934,7 @@
         let opts = part.opts,
           entry = part.payloadAt;
         if (!opts || !entry) {
-          const d = StegCore.decodeContainer(img, img);
+          const d = Stegassette.decodeContainer(img, img);
           opts = d.opts;
           entry = d.entries.find((e) => e.name !== Album.PART_ENTRY);
         }
