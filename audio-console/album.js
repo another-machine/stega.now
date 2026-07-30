@@ -172,10 +172,18 @@ const Album = (() => {
         srcImg.width - 2 * nativeB,
         srcImg.height - 2 * nativeB,
       ) * 3;
-    const fits = capacity >= total && srcImg.width >= minWidth;
+    // An odd width orphans the last data pixel of every odd row (its key
+    // reflects back in-row and collides with its neighbour's), so keeping the
+    // artwork at native size is only safe on an even width — crop a column
+    // rather than rescale the whole picture.
+    const evenSrc =
+      srcImg.width % 2 === 0
+        ? srcImg
+        : StegCore.cropImg(srcImg, 0, 0, srcImg.width - 1, srcImg.height);
+    const fits = capacity >= total && evenSrc.width >= minWidth;
     const useB = fits ? nativeB : B;
     const scaled = fits
-      ? srcImg
+      ? evenSrc
       : StegCore.autoScaleImg(srcImg, total, B, null, 3, minWidth);
     const out = StegCore.encodeContainer(entries, scaled, scaled, {
       ...opts,
