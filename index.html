@@ -7,48 +7,38 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <title>stega-now</title>
+    <link rel="stylesheet" href="amplib-ui.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-      }
+      /* Screen-specific pieces on top of amplib-ui. Values are tokens; the
+         local components here (cart tile, filmstrip, reveal) belong to this
+         screen alone. */
       html,
       body {
         height: 100%;
       }
       body {
-        margin: 0;
         display: flex;
         flex-direction: column;
-        font: 11px/1.4 monospace;
-        background: #fff;
-        color: #000;
       }
-      @media (prefers-color-scheme: dark) {
-        body {
-          background: #000;
-          color: #fff;
-        }
-      }
-      button {
-        font: inherit;
-      }
+
+      /* top bar while a cartridge is playing — a masthead that can hide */
       #bar {
         display: none;
-        gap: 4px;
         align-items: center;
-        padding: 2px 4px;
-        border-bottom: 1px solid;
-        flex-wrap: wrap;
       }
       #bar.on {
         display: flex;
       }
-      #bar .sp {
-        flex: 1;
+      #tabs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ht-space-2);
       }
+
       #stage {
         flex: 1;
-        min-height: 0;
+        min-block-size: 0;
         display: none;
       }
       #stage.on {
@@ -61,11 +51,13 @@
         display: block;
       }
       #stage .pane {
+        /* = ht-participation-scroll */
         width: 100%;
         height: 100%;
         overflow: auto;
-        padding: 16px;
-        box-sizing: border-box;
+        scrollbar-width: thin;
+        scrollbar-color: var(--ht-line-strong) transparent;
+        padding: var(--ht-space-6);
       }
       #stage img {
         max-width: 100%;
@@ -77,24 +69,33 @@
         cursor: zoom-out;
       }
       #stage pre {
-        margin: 0;
         white-space: pre-wrap;
         word-break: break-word;
       }
+      /* transport progress is .u-inline; only its alignment is local */
+      #stage progress {
+        vertical-align: middle;
+      }
+
       #lib {
-        padding: 10px;
-      }
-      #grid {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 8px 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
       }
+
+      /* cart tile: a library entry. Buttons and plain tiles share the look,
+         so the base button styling is unwound where it fights the tile. */
       .cart {
-        padding: 5px;
-        border: 1px solid;
-        background: none;
-        color: inherit;
+        display: block;
+        min-block-size: 0;
+        padding: var(--ht-space-2);
+        border: var(--ht-hairline) solid var(--ht-line);
+        background-color: var(--ht-paper);
+        color: var(--ht-ink-dim);
+        font-size: var(--ht-text-small);
+        white-space: normal;
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
@@ -104,59 +105,61 @@
         display: block;
         width: 72px;
         image-rendering: pixelated;
-        margin: 0 auto 4px;
+        margin: 0 auto var(--ht-space-2);
         pointer-events: none;
       }
       .cart.sel {
-        outline: 2px solid;
+        outline: 2px solid var(--ht-ink);
+        outline-offset: var(--ht-hairline);
       }
       .cart .face {
         display: block;
         width: 100%;
+        min-block-size: 0;
         padding: 0;
         border: 0;
         background: none;
         color: inherit;
         font: inherit;
+        font-size: var(--ht-text-small);
+        white-space: normal;
         text-align: center;
         cursor: pointer;
       }
       .cart .strip {
         display: flex;
         gap: 1px;
-        margin-bottom: 4px;
+        margin-bottom: var(--ht-space-2);
         pointer-events: none;
       }
       .cart .strip img {
         width: 34px;
         margin: 0;
       }
+
+      /* group order/rename panel */
       #gedit {
-        border: 1px solid;
-        padding: 6px 8px;
-        margin: 8px 0;
+        border: var(--ht-hairline) solid var(--ht-line);
+        padding: var(--ht-space-3) var(--ht-space-4);
       }
       #gedit ol {
-        margin: 4px 0;
-        padding-left: 22px;
+        margin-block: var(--ht-space-2);
+        padding-inline-start: var(--ht-space-7);
       }
       #gedit img {
+        display: inline-block;
         width: 24px;
         vertical-align: middle;
-        margin-right: 4px;
+        margin-right: var(--ht-space-2);
         image-rendering: pixelated;
       }
-      #gedit input {
-        font: inherit;
-        color: inherit;
-        background: none;
-        border: 1px solid;
-      }
+
+      /* filmstrip: the sounding part at full strength */
       #film {
         display: flex;
         flex-wrap: wrap;
-        gap: 2px;
-        margin: 6px 0;
+        gap: var(--ht-space-1);
+        margin-block: var(--ht-space-3);
       }
       #film img {
         display: block;
@@ -167,16 +170,20 @@
       #film img.now {
         opacity: 1;
       }
+
+      /* the reveal: encoded overlay above its developing reconstruction */
       .rev {
         position: relative;
         display: inline-block;
-        margin: 6px 0;
+        margin-block: var(--ht-space-3);
         line-height: 0;
       }
       .rev canvas {
         display: block;
         height: 44vh;
         width: auto;
+        border: 0;
+        background: none;
         image-rendering: pixelated;
       }
       .rev canvas + canvas {
@@ -189,24 +196,25 @@
       }
     </style>
   </head>
-  <body>
-    <div id="bar">
+  <body data-theme="auto" data-density="compact">
+    <div id="bar" class="masthead">
       <span id="cartname"></span>
       <span id="tabs"></span>
-      <span class="sp"></span>
+      <span class="u-grow"></span>
       <button id="eject">eject</button>
     </div>
 
     <div id="stage"></div>
 
     <div id="lib">
-      <div>stega-now</div>
-      <div id="grid"></div>
+      <h1>stega-now</h1>
+      <div id="grid" class="ht-arrange-row"></div>
       <div id="gedit" hidden></div>
-      <div>
+      <div class="ht-arrange-row">
         <button id="add">add</button>
         <button id="select" hidden>select</button>
         <button id="group" hidden>group</button>
+        <button id="delete" hidden>delete</button>
         <button id="cancel" hidden>cancel</button>
         <input
           type="file"
@@ -216,8 +224,10 @@
           hidden
         />
       </div>
-      <p id="hint" hidden>hold a cartridge down to delete it</p>
-      <p id="err"></p>
+      <p id="hint" class="ht-type-small" hidden>
+        select cartridges to group or delete them
+      </p>
+      <p id="err" class="status"></p>
     </div>
 
     <script src="lib/stegassette.js"></script>
@@ -582,6 +592,7 @@
         const btn = document.createElement("button");
         btn.textContent = "play";
         const prog = document.createElement("progress");
+        prog.className = "u-inline";
         prog.max = 1;
         prog.value = 0;
         const tm = document.createElement("span");
@@ -685,6 +696,7 @@
         const btn = document.createElement("button");
         btn.textContent = "play";
         const prog = document.createElement("progress");
+        prog.className = "u-inline";
         prog.max = 1;
         prog.value = 0;
         const tm = document.createElement("span");
@@ -1021,7 +1033,9 @@
       }
 
       // The reveal as a view of its own: the whole image develops on a
-      // timer rather than a playhead, and can be replayed.
+      // timer rather than a playhead, and can be replayed. Passing every
+      // entry keeps the sweep byte-ordered but channel-aware — a stereo
+      // track's two halves develop together, as they do during playback.
       const REVEAL_MS = 2200;
       function showReveal() {
         if (!current || !current.img) return;
@@ -1029,7 +1043,7 @@
         clearStage();
         const pane = document.createElement("div");
         pane.className = "pane";
-        const rev = Reveal.build(current.img, current.opts, null);
+        const rev = Reveal.build(current.img, current.opts, current.entries || null);
         stageReveal = rev;
         rev.el.classList.add("big");
         const replay = document.createElement("button");
@@ -1052,6 +1066,9 @@
             const b = document.createElement("button");
             b.textContent = e.name || kindOf(e.mimetype) + " " + i;
             b.disabled = i === selected;
+            // polarity marks the current entry; disabled alone reads as
+            // "unavailable" in amplib-ui
+            b.setAttribute("aria-pressed", i === selected);
             b.addEventListener("click", () => showEntry(i));
             tabs.appendChild(b);
           });
@@ -1059,6 +1076,7 @@
           const b = document.createElement("button");
           b.textContent = "reveal";
           b.disabled = selected === -2;
+          b.setAttribute("aria-pressed", selected === -2);
           b.addEventListener("click", showReveal);
           tabs.appendChild(b);
         }
@@ -1135,32 +1153,13 @@
         img.alt = rec.name;
         return img;
       }
-      function updateGroupBtn() {
+      function updateSelButtons() {
         $("group").textContent =
           "group" + (picked.size ? " (" + picked.size + ")" : "");
         $("group").disabled = picked.size < 2;
-      }
-      // click plays, a 650ms hold deletes — shared by cart and group tiles
-      function holdable(el, onHold, onClick) {
-        let holdT = null,
-          held = false;
-        el.addEventListener("pointerdown", () => {
-          held = false;
-          holdT = setTimeout(() => {
-            held = true;
-            onHold();
-          }, 650);
-        });
-        for (const t of ["pointerup", "pointerleave", "pointercancel"])
-          el.addEventListener(t, () => clearTimeout(holdT));
-        el.addEventListener("contextmenu", (e) => e.preventDefault());
-        el.addEventListener("click", (e) => {
-          if (held) {
-            e.preventDefault();
-            return;
-          }
-          onClick();
-        });
+        $("delete").textContent =
+          "delete" + (picked.size ? " (" + picked.size + ")" : "");
+        $("delete").disabled = !picked.size;
       }
 
       async function renderGrid() {
@@ -1170,12 +1169,13 @@
         const byId = new Map(lib.map((r) => [r.id, r]));
         const grouped = new Set(groups.flatMap((g) => g.cartIds));
 
-        $("hint").hidden = !lib.length;
-        $("select").hidden = lib.length - grouped.size < 2;
+        $("hint").hidden = !lib.length || selecting;
+        $("select").hidden = !(lib.length - grouped.size);
         $("select").textContent = selecting ? "done" : "select";
         $("group").hidden = !selecting;
+        $("delete").hidden = !selecting;
         $("cancel").hidden = !selecting;
-        updateGroupBtn();
+        updateSelButtons();
 
         // groups first — each previews its members in order
         for (const g of groups) {
@@ -1192,21 +1192,11 @@
           face.appendChild(
             document.createTextNode(g.name + " · " + recs.length + " parts"),
           );
-          holdable(
-            face,
-            () => {
-              if (confirm("delete group " + g.name + "? (cartridges stay)"))
-                grpDel(g.id).then(() => {
-                  if (editing === g.id) editing = null;
-                  renderGrid();
-                });
-            },
-            () => {
-              if (selecting) return;
-              $("err").textContent = "";
-              playGroup(g);
-            },
-          );
+          face.addEventListener("click", () => {
+            if (selecting) return;
+            $("err").textContent = "";
+            playGroup(g);
+          });
           const ed = document.createElement("button");
           ed.textContent = "edit";
           ed.addEventListener("click", () => {
@@ -1225,24 +1215,17 @@
           const label = document.createElement("span");
           label.textContent = (picked.has(rec.id) ? "✓ " : "") + rec.name;
           b.append(thumbOf(rec), label);
-          holdable(
-            b,
-            () => {
-              if (confirm("delete " + rec.name + "?"))
-                removeFromLib(rec.id).then(renderGrid);
-            },
-            () => {
-              $("err").textContent = "";
-              if (!selecting) return play(rec);
-              // tick this tile in place — re-rendering the whole grid per
-              // click is what made the thumbnails flicker
-              const on = picked.has(rec.id);
-              on ? picked.delete(rec.id) : picked.add(rec.id);
-              b.classList.toggle("sel", !on);
-              label.textContent = (on ? "" : "✓ ") + rec.name;
-              updateGroupBtn();
-            },
-          );
+          b.addEventListener("click", () => {
+            $("err").textContent = "";
+            if (!selecting) return play(rec);
+            // tick this tile in place — re-rendering the whole grid per
+            // click is what made the thumbnails flicker
+            const on = picked.has(rec.id);
+            on ? picked.delete(rec.id) : picked.add(rec.id);
+            b.classList.toggle("sel", !on);
+            label.textContent = (on ? "" : "✓ ") + rec.name;
+            updateSelButtons();
+          });
           grid.appendChild(b);
         }
 
@@ -1262,6 +1245,7 @@
           renderGrid();
         };
         const nameIn = document.createElement("input");
+        nameIn.type = "text"; // amplib-ui styles typed text inputs only
         nameIn.value = g.name;
         nameIn.addEventListener("change", () =>
           save({ name: nameIn.value.trim() || g.name }),
@@ -1345,6 +1329,16 @@
         selecting = false;
         picked.clear();
         if (grp) editing = grp.id; // open the order panel on the new group
+        renderGrid();
+      });
+      $("delete").addEventListener("click", async () => {
+        if (!picked.size) return;
+        const n = picked.size;
+        if (!confirm("delete " + n + " cartridge" + (n === 1 ? "" : "s") + "?"))
+          return;
+        for (const id of [...picked]) await removeFromLib(id);
+        selecting = false;
+        picked.clear();
         renderGrid();
       });
       $("file").addEventListener("change", async (e) => {

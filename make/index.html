@@ -3,241 +3,103 @@
   <head>
     <meta charset="utf-8" />
     <title>stegassette</title>
+    <link rel="stylesheet" href="../amplib-ui.css" />
     <style>
-      :root {
-        /* fixed dark UI — this is what makes native chrome (scrollbars, select
-           popups, the text caret, focus rings) render dark rather than light */
-        color-scheme: dark;
-        --bg: #0d0d0d;
-        --surface: #111111;
-        --surface2: #161616;
-        --border: #222222;
-        --border2: #333333;
-        --text: #bbbbbb;
-        --dim: #555555;
-        --ghost: #2e2e2e;
-        --accent: #3355bb;
-        --accent-hi: #99aaee;
-        /* thumb sits a step above --border2 so it reads against --surface;
-           the track stays transparent — macOS renders it that way regardless,
-           so the thumb must never depend on it for contrast */
-        --scrollbar-thumb: #3a3a3a;
-        --scrollbar-track: transparent;
-        --font: monospace;
-        --fs: 11px;
-        --lh: 1.5;
-        --gap: 10px;
-        --gap-sm: 4px;
-        --max-w: 1040px;
-      }
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
+      /* Screen-specific styling on top of amplib-ui. The encoder is a fixed
+         dark tool — no data-theme, so amplib's default polarity (ink on black)
+         applies and native chrome renders dark via color-scheme. Everything
+         here is either layout for this screen or a component that exists only
+         here (waveform, dual-range, chunk editor, frame picker). */
+
       body {
-        background: var(--bg);
-        color: var(--text);
-        font: var(--fs)/var(--lh) var(--font);
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 16px;
-        min-height: 100vh;
-        gap: 12px;
-      }
-      h1 {
-        font-size: var(--fs);
-        color: var(--ghost);
-        letter-spacing: 0.12em;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
       }
       section {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        gap: var(--gap);
+        gap: var(--ht-flow);
         width: 100%;
-        max-width: var(--max-w);
+        max-width: var(--ht-page-max);
       }
       section[hidden] {
         display: none;
       }
 
-      /* drop zones */
-      .drop-pair {
+      /* Drop states are amplib's (data-state="over", data-ready). Local: a
+         page-wide drag lights the drop the payload belongs to, same look as
+         its over state. */
+      body.drag-audio #adrop,
+      body.drag-image #idrop {
+        color: var(--ht-ink);
+        border-color: var(--ht-line-strong);
+        border-style: solid;
+        background-color: var(--ht-raised);
+      }
+
+      /* mode bar: tabs plus a right-aligned note */
+      .mode-bar {
         display: flex;
-        gap: var(--gap);
+        align-items: center;
+        gap: var(--ht-gap);
         width: 100%;
+        flex-wrap: wrap;
       }
-      .drop {
-        flex: 1;
-        border: 1px dashed var(--border);
-        padding: 16px 20px;
-        color: var(--ghost);
-        cursor: pointer;
-        text-align: center;
-        user-select: none;
-        transition:
-          border-color 0.12s,
-          color 0.12s;
-      }
-      .drop:hover,
-      .drop.over {
-        border-color: var(--dim);
-        color: var(--dim);
-      }
-      .drop.ready {
-        border-color: var(--accent);
-        color: var(--accent-hi);
-      }
-      .drop-lbl {
-        display: block;
-      }
-      .drop-sub {
-        display: block;
-        font-size: 10px;
-        color: var(--ghost);
-        margin-top: 2px;
-      }
-      .drop.ready .drop-sub {
-        color: var(--dim);
-      }
-      input[type="file"] {
-        display: none;
+      .mode-note {
+        margin-left: auto;
+        text-align: right;
       }
 
-      /* buttons */
-      button {
-        background: var(--surface2);
-        border: 1px solid var(--border);
-        color: var(--dim);
-        font: var(--fs) var(--font);
-        padding: 4px 10px;
-        cursor: pointer;
-        white-space: nowrap;
-      }
-      button:hover:not(:disabled) {
-        border-color: var(--border2);
-        color: var(--text);
-      }
-      button:disabled {
-        opacity: 0.28;
-        cursor: default;
-      }
-
-      /* form controls */
-      select,
-      input[type="text"],
-      input[type="number"] {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-        font: var(--fs) var(--font);
-        padding: 3px 5px;
-      }
-      select {
-        cursor: pointer;
-      }
-      :is(select, input):focus {
-        outline: none;
-        border-color: var(--border2);
-      }
-
-      .status {
-        color: var(--ghost);
-        width: 100%;
-        min-height: 1em;
-      }
-
-      /* scrollbars — macOS hides overlay scrollbars until they're used and
-         ignores custom colours unless scrollbar-width is set, so both
-         properties are needed together. Never transition scrollbar-color:
-         WebKit flickers the bar on every change. */
-      :is(html, textarea, .chunk-list, .jobs-list, .ec-body pre) {
-        scrollbar-width: thin;
-        scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-      }
-      /* reserve the gutter so a list that grows into a scrollbar (a chunk set
-         past ~8 rows) doesn't shift its rows sideways as it appears */
-      .chunk-list,
+      /* jobs queue: an amplib panel + list */
       .jobs-list {
-        scrollbar-gutter: stable;
+        --ht-list-max: 200px;
       }
-      @media (prefers-contrast: more) {
-        :root {
-          --scrollbar-thumb: #8a8a8a;
-        }
+      .ji-files {
+        font-size: var(--ht-text-small);
       }
-      /* Chrome < 121 and Safari < 26.2 ignore scrollbar-color; the custom
-         properties above cascade into these on their own */
-      @supports not (scrollbar-color: auto) {
-        ::-webkit-scrollbar {
-          width: 10px;
-          height: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: var(--scrollbar-thumb);
-          border-radius: 5px;
-        }
-        ::-webkit-scrollbar-track {
-          background: var(--scrollbar-track);
-        }
+      .ji-ok {
+        opacity: 0.7;
+      }
+      /* failure marks survive the inverted selected row and greyscale */
+      .ji-miss {
+        font-weight: 700;
+      }
+      .ji-miss::before {
+        content: "!";
       }
 
-      /* settings panel — two columns */
+      /* settings panel — two columns of field rows */
       .settings-panel {
+        --ht-field-label: 4.75rem;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px 32px;
+        gap: var(--ht-space-5) var(--ht-space-8);
         width: 100%;
       }
       .sg {
         display: flex;
         flex-direction: column;
-        gap: 1px;
+        gap: var(--ht-space-1);
       }
       .sg-hdr {
-        color: var(--ghost);
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        padding-bottom: 4px;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 3px;
-      }
-      .sf {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 2px 0;
-      }
-      .sf > label:first-child {
-        color: var(--dim);
-        min-width: 76px;
-        flex-shrink: 0;
-      }
-      .sf-hint {
-        color: var(--dim);
-        font-size: 10px;
-        margin-left: 2px;
+        padding-block-end: var(--ht-space-2);
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
+        margin-block-end: var(--ht-space-1);
       }
 
       /* waveform */
       .wave-section {
         display: none;
         flex-direction: column;
-        gap: 3px;
+        gap: var(--ht-space-1);
         width: 100%;
       }
       .wave-section.on {
         display: flex;
-      }
-      .wave-canvas {
-        display: block;
-        width: 100%;
-        background: var(--surface);
-        border: 1px solid var(--border);
       }
       #waveCoarse {
         height: 52px;
@@ -246,7 +108,7 @@
         height: 72px;
       }
 
-      /* dual-range */
+      /* dual-range: two overlapping natives making one span control */
       .dr {
         position: relative;
         height: 18px;
@@ -257,8 +119,8 @@
         position: absolute;
         inset: 0;
         margin: auto;
-        height: 1px;
-        background: var(--border2);
+        height: var(--ht-hairline);
+        background: var(--ht-line-strong);
         pointer-events: none;
       }
       .dr-fill {
@@ -266,7 +128,7 @@
         top: 50%;
         height: 2px;
         transform: translateY(-50%);
-        background: var(--accent);
+        background: var(--ht-ink);
         pointer-events: none;
       }
       .dr input[type="range"] {
@@ -274,6 +136,7 @@
         inset: 0;
         width: 100%;
         height: 100%;
+        min-block-size: 0;
         margin: 0;
         padding: 0;
         appearance: none;
@@ -293,60 +156,51 @@
         pointer-events: all;
         -webkit-appearance: none;
         appearance: none;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: var(--text);
+        width: 0.5rem;
+        height: 0.875rem;
+        border-radius: var(--ht-radius);
+        background: var(--ht-ink);
         cursor: col-resize;
-        margin-top: -4px;
+        margin-top: -6px;
       }
       .dr input[type="range"]::-moz-range-thumb {
         pointer-events: all;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: var(--text);
-        cursor: col-resize;
+        width: 0.5rem;
+        height: 0.875rem;
+        border-radius: var(--ht-radius);
+        background: var(--ht-ink);
         border: none;
-      }
-      .dr input[type="range"]:focus {
-        outline: none;
+        cursor: col-resize;
       }
 
       .trim-row {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
+        gap: var(--ht-space-2);
         flex-wrap: wrap;
       }
       .trim-row label {
-        color: var(--dim);
-        font-size: 10px;
+        color: var(--ht-ink-dim);
+        font-size: var(--ht-text-small);
       }
 
       /* additional entries */
       .addl-row {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
+        gap: var(--ht-space-2);
         width: 100%;
-        padding: 4px 6px;
-        border: 1px solid var(--border);
-        background: var(--surface);
+        padding: var(--ht-space-2) var(--ht-space-3);
+        border: var(--ht-hairline) solid var(--ht-line);
+        background: var(--ht-paper);
       }
       .addl-row textarea {
         flex: 1;
-        resize: vertical;
-        font: var(--fs) var(--font);
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-        padding: 2px 4px;
         min-height: 42px;
       }
       .addl-info {
-        color: var(--dim);
-        font-size: 10px;
+        color: var(--ht-ink-faint);
+        font-size: var(--ht-text-small);
         flex: 1;
         white-space: nowrap;
         overflow: hidden;
@@ -355,60 +209,45 @@
       .entries-hdr {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
-        font-size: 10px;
-        color: var(--dim);
-        letter-spacing: 0.05em;
+        gap: var(--ht-space-2);
       }
 
-      /* action row */
-      .action-row {
-        display: flex;
-        align-items: center;
-        gap: var(--gap);
-        flex-wrap: wrap;
-        width: 100%;
+      #estats {
+        flex: 1 1 auto;
+        inline-size: auto;
+        text-align: end;
       }
 
       /* player section */
       .player-hdr {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--ht-space-4);
         width: 100%;
-        border-top: 1px solid var(--border);
-        padding-top: var(--gap);
-      }
-      .player-hdr-lbl {
-        color: var(--ghost);
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        flex: 1;
+        border-block-start: var(--ht-hairline) solid var(--ht-line);
+        padding-block-start: var(--ht-flow);
       }
       #displayRow {
         display: none;
         flex-wrap: wrap;
-        gap: 12px;
+        gap: var(--ht-space-5);
         width: 100%;
         align-items: flex-start;
       }
       .disp-col {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--ht-space-2);
         flex: 1 1 260px;
         max-width: 460px;
       }
-      .disp-lbl {
-        color: var(--ghost);
-        font-size: 10px;
-        letter-spacing: 0.1em;
-      }
       .img-wrap {
         position: relative;
-        border: 1px solid var(--border);
+        border: var(--ht-hairline) solid var(--ht-line);
+        background: var(--ht-sunken);
         max-width: 100%;
       }
+      /* both are ht-media-flush in markup; only geometry is local */
       canvas.display {
         display: block;
         width: 100%;
@@ -421,13 +260,10 @@
         height: auto;
         pointer-events: none;
       }
-      #clock {
-        color: var(--dim);
-      }
       .pbar {
         display: flex;
         align-items: center;
-        gap: var(--gap);
+        gap: var(--ht-gap);
         flex-wrap: wrap;
       }
 
@@ -438,136 +274,90 @@
       }
       .entry-card {
         width: 100%;
-        border: 1px solid var(--border);
-        background: var(--surface);
-        margin-bottom: 4px;
+        border: var(--ht-hairline) solid var(--ht-line);
+        background: var(--ht-paper);
+        margin-block-end: var(--ht-space-2);
       }
       .ec-hdr {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
-        padding: 4px 8px;
-        border-bottom: 1px solid var(--border);
-        font-size: 10px;
+        gap: var(--ht-space-2);
+        padding: var(--ht-space-2) var(--ht-space-4);
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
+        font-size: var(--ht-text-small);
       }
       .ec-mt {
-        color: var(--accent-hi);
+        color: var(--ht-ink);
+        font-weight: 700;
         flex: 1;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .ec-nm {
-        color: var(--dim);
+        color: var(--ht-ink-faint);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         max-width: 140px;
       }
       .ec-sz {
-        color: var(--dim);
-        margin-left: auto;
+        color: var(--ht-ink-faint);
+        margin-inline-start: auto;
         white-space: nowrap;
-        padding-left: 4px;
+        padding-inline-start: var(--ht-space-2);
       }
       .ec-dl {
-        color: var(--dim);
+        color: var(--ht-ink-dim);
         text-decoration: none;
-        padding: 2px 8px;
-        border: 1px solid var(--border);
-        margin-left: 4px;
-        background: var(--surface2);
-      }
-      .ec-dl:hover {
-        color: var(--text);
-        border-color: var(--border2);
+        padding: var(--ht-space-1) var(--ht-space-4);
+        border: var(--ht-hairline) solid var(--ht-line);
+        margin-inline-start: var(--ht-space-2);
+        background: var(--ht-raised);
       }
       .ec-body {
-        padding: 6px 8px;
+        padding: var(--ht-space-3) var(--ht-space-4);
       }
       .ec-body pre {
+        /* = ht-type-code + ht-participation-scroll */
         white-space: pre-wrap;
         word-break: break-all;
         max-height: 200px;
         overflow-y: auto;
-        font-size: 10px;
-        color: var(--text);
+        scrollbar-width: thin;
+        scrollbar-color: var(--ht-line-strong) transparent;
+        scrollbar-gutter: stable;
+        font-size: var(--ht-text-small);
       }
       .ec-body img {
         max-width: 100%;
         display: block;
       }
       .ec-hint {
-        color: var(--dim);
-        font-size: 10px;
+        color: var(--ht-ink-faint);
+        font-size: var(--ht-text-small);
       }
 
       /* frame picker */
       .frame-picker-section {
         display: none;
         flex-direction: column;
-        gap: 3px;
+        gap: var(--ht-space-1);
         width: 100%;
       }
       .frame-picker-section.on {
         display: flex;
       }
-      #framePreview {
-        display: block;
-        width: 100%;
-        background: var(--surface);
-        border: 1px solid var(--border);
-      }
-      .scrub-range {
-        display: block;
-        width: 100%;
-        height: 18px;
-        appearance: none;
-        -webkit-appearance: none;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        margin: 0;
-        padding: 0;
-        cursor: col-resize;
-      }
-      .scrub-range::-webkit-slider-runnable-track {
-        background: var(--border2);
-        height: 2px;
-      }
-      .scrub-range::-moz-range-track {
-        background: var(--border2);
-        height: 2px;
-      }
-      .scrub-range::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: var(--accent-hi);
-        margin-top: -5px;
-        cursor: col-resize;
-      }
-      .scrub-range::-moz-range-thumb {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: var(--accent-hi);
-        border: none;
-        cursor: col-resize;
-      }
-      .scrub-range:focus {
-        outline: none;
-      }
       .frame-thumbs {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--gap-sm);
+        gap: var(--ht-space-2);
         width: 100%;
       }
       .frame-thumb {
         position: relative;
-        border: 1px solid var(--border);
-        background: var(--surface);
+        border: var(--ht-hairline) solid var(--ht-line);
+        background: var(--ht-sunken);
         flex-shrink: 0;
       }
       .frame-thumb img {
@@ -580,39 +370,33 @@
         position: absolute;
         top: 1px;
         right: 1px;
-        background: rgba(0, 0, 0, 0.65);
-        border: none;
-        color: var(--dim);
-        font: 9px var(--font);
+        min-block-size: 0;
         padding: 1px 3px;
-        cursor: pointer;
+        border: 0;
+        background: var(--ht-paper);
+        color: var(--ht-ink-dim);
+        font-size: var(--ht-text-small);
         line-height: 1;
+        cursor: pointer;
       }
       .frame-thumb-del:hover {
-        color: var(--text);
+        color: var(--ht-ink);
       }
       .frame-thumb-num {
         position: absolute;
         bottom: 1px;
         left: 3px;
-        font-size: 9px;
-        color: var(--dim);
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-dim);
+        background: var(--ht-paper);
+        padding: 0 2px;
         pointer-events: none;
       }
 
-      /* global drag highlight */
-      body.drag-audio #adrop {
-        border-color: var(--dim);
-        color: var(--dim);
-      }
-      body.drag-image #idrop {
-        border-color: var(--dim);
-        color: var(--dim);
-      }
       /* encoder layout: roomy main column + controls sidebar */
       .enc-layout {
         display: flex;
-        gap: 16px;
+        gap: var(--ht-space-6);
         width: 100%;
         align-items: flex-start;
         flex-wrap: wrap;
@@ -623,32 +407,26 @@
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        gap: var(--gap);
+        gap: var(--ht-flow);
       }
       .enc-side {
-        flex: 0 0 320px;
-        max-width: 320px;
+        flex: 0 0 var(--ht-sidebar);
+        max-width: var(--ht-sidebar);
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: var(--ht-space-5);
         position: sticky;
-        top: 8px;
+        top: var(--ht-space-4);
+        --ht-field-label: 3.75rem;
       }
       .enc-side .settings-panel {
         grid-template-columns: 1fr;
         min-width: 0;
       }
       .enc-side .sg,
-      .enc-side .sf {
+      .enc-side .field {
         min-width: 0;
-      }
-      /* let control rows wrap instead of overflowing the narrow sidebar */
-      .enc-side .sf {
-        flex-wrap: wrap;
-      }
-      .enc-side .sf > label:first-child {
-        min-width: 60px;
       }
       .enc-side select,
       .enc-side input[type="number"],
@@ -670,116 +448,41 @@
           position: static;
         }
       }
-      /* jobs queue panel */
-      .jobs-panel {
-        border: 1px solid var(--border);
-        background: var(--surface);
-        margin-bottom: var(--gap-sm);
-      }
-      .jobs-hdr {
-        display: flex;
-        align-items: center;
-        gap: var(--gap-sm);
-        padding: 4px 6px;
-        border-bottom: 1px solid var(--border);
-      }
-      .jobs-hdr .grow {
-        flex: 1;
-      }
-      .jobs-list {
-        max-height: 200px;
-        overflow-y: auto;
-      }
-      .job-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 4px 8px;
-        cursor: pointer;
-        border-bottom: 1px solid var(--border);
-        font-size: 11px;
-      }
-      .job-item:hover {
-        background: #1a1a1a;
-      }
-      .job-item.sel {
-        background: #23314a;
-      }
-      .job-item .ji-idx {
-        color: var(--dim);
-        min-width: 18px;
-        text-align: right;
-      }
-      .job-item .ji-name {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .job-item .ji-meta {
-        color: var(--dim);
-      }
-      .job-item .ji-files {
-        font-size: 10px;
-      }
-      .ji-ok {
-        color: #6e6;
-      }
-      .ji-miss {
-        color: #e66;
-      }
-      /* channel plan slot rows */
+
+      /* channel plan slot rows — the dots keep their channel colours: they
+         name actual R/G/B pixel channels, which is subject matter here */
       .chan-plan-rows {
         display: flex;
         flex-direction: column;
-        gap: 3px;
-        margin: 2px 0 2px 0;
+        gap: var(--ht-space-1);
+        margin-block: var(--ht-space-1);
       }
       .chan-row {
         display: flex;
         align-items: center;
-        gap: 4px;
-        font-size: 11px;
+        gap: var(--ht-space-2);
       }
       .chan-row .ch-dot {
         width: 10px;
         height: 10px;
-        border-radius: 2px;
         display: inline-block;
       }
       .chan-row.dim {
-        opacity: 0.4;
+        opacity: 0.35;
       }
       .chan-row button {
         padding: 0 5px;
       }
-
-      /* ── mode bar ───────────────────────────────────────────────────────
-         Four capture modes over one shared rig. The jobs panel, settings
-         sidebar, entries list and player are common to all of them; only the
-         main column's capture area swaps, driven by body[data-mode]. */
-      .mode-bar {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        width: 100%;
-        flex-wrap: wrap;
+      /* a lossy reconstruction path: full ink and a leading mark, no hue */
+      #reconLabel[data-warn] {
+        color: var(--ht-ink);
+        font-weight: 700;
       }
-      .mode-bar button {
-        padding: 4px 12px;
-      }
-      .mode-bar button.on {
-        border-color: var(--accent);
-        color: var(--accent-hi);
-        background: var(--surface);
-      }
-      .mode-note {
-        color: var(--ghost);
-        font-size: 10px;
-        margin-left: auto;
-        text-align: right;
+      #reconLabel[data-warn]::before {
+        content: "! ";
       }
 
+      /* mode-dependent visibility */
       body[data-mode="data"] #adrop,
       body[data-mode="data"] .wave-section,
       body[data-mode="data"] #addTrackBtn,
@@ -794,36 +497,34 @@
       .chunks-section {
         display: none;
         flex-direction: column;
-        gap: var(--gap-sm);
+        gap: var(--ht-space-2);
         width: 100%;
       }
       body[data-mode="series"] .chunks-section.on {
         display: flex;
       }
 
-      /* ── chunk editor (series mode) ─────────────────────────────────── */
+      /* chunk editor (series mode) */
       .chunks-hdr {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
+        gap: var(--ht-space-2);
         flex-wrap: wrap;
-        font-size: 10px;
-        color: var(--dim);
-        letter-spacing: 0.05em;
-      }
-      .chunks-hdr .grow {
-        flex: 1;
       }
       .chunks-hdr input[type="number"] {
         width: 52px;
       }
       .chunk-list {
+        /* = ht-participation-scroll */
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--border);
-        background: var(--surface);
+        border: var(--ht-hairline) solid var(--ht-line);
+        background: var(--ht-paper);
         max-height: 340px;
         overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--ht-line-strong) transparent;
+        scrollbar-gutter: stable;
       }
       .chunk-list:empty {
         display: none;
@@ -831,27 +532,31 @@
       .chunk-row {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
-        padding: 3px 5px;
-        border-bottom: 1px solid var(--border);
+        gap: var(--ht-space-2);
+        padding: var(--ht-space-1) var(--ht-space-2);
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
       }
       .chunk-row:last-child {
-        border-bottom: none;
+        border-block-end: none;
       }
+      /* selection: a raised surface plus a hard ink rule at the start — the
+         row holds live inputs, so full polarity inversion would fight them */
       .chunk-row.sel {
-        background: rgba(51, 85, 187, 0.14);
+        background: var(--ht-raised);
+        box-shadow: inset 2px 0 0 var(--ht-ink);
       }
       .chunk-row input[type="number"] {
         width: 62px;
       }
       .chunk-row .ck-idx {
-        color: var(--dim);
+        color: var(--ht-ink-faint);
         min-width: 18px;
         cursor: pointer;
         user-select: none;
       }
       .chunk-row.sel .ck-idx {
-        color: var(--accent-hi);
+        color: var(--ht-ink);
+        font-weight: 700;
       }
       .chunk-row .ck-out {
         flex: 1;
@@ -861,32 +566,36 @@
         max-width: 150px;
       }
       .chunk-row .ck-img.miss {
-        color: var(--dim);
-        border-color: var(--border);
+        color: var(--ht-ink-faint);
+        border-color: var(--ht-line);
       }
       .chunk-row .ck-dur,
       .chunk-row .ck-size {
-        color: var(--dim);
-        font-size: 10px;
+        color: var(--ht-ink-faint);
+        font-size: var(--ht-text-small);
         white-space: nowrap;
       }
       .chunk-row .ck-size.over {
-        color: #cc7744;
+        color: var(--ht-ink);
+        font-weight: 700;
+      }
+      .chunk-row .ck-size.over::before {
+        content: "! ";
       }
       .chunk-row button {
         padding: 0 6px;
       }
       .chunk-row .ck-txt.has {
-        color: var(--accent-hi);
-        border-color: var(--border2);
+        color: var(--ht-ink);
+        border-color: var(--ht-line-strong);
       }
       .chunk-entries {
         display: none;
         flex-direction: column;
-        gap: 2px;
-        padding: 3px 5px 6px 28px;
-        border-bottom: 1px solid var(--border);
-        background: var(--surface2);
+        gap: var(--ht-space-1);
+        padding: var(--ht-space-1) var(--ht-space-2) var(--ht-space-3) 28px;
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
+        background: var(--ht-raised);
       }
       .chunk-entries.open {
         display: flex;
@@ -897,14 +606,14 @@
       .chunks-foot {
         display: flex;
         align-items: center;
-        gap: var(--gap-sm);
+        gap: var(--ht-space-2);
         flex-wrap: wrap;
-        font-size: 10px;
-        color: var(--ghost);
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-faint);
       }
     </style>
   </head>
-  <body data-mode="clip">
+  <body data-mode="clip" data-density="compact">
     <h1>stegassette</h1>
 
     <!-- ═══ ENCODER ═══ -->
@@ -912,46 +621,41 @@
       <!-- capture mode: which source material this cartridge is made from.
            everything downstream (settings, entries, encode, player) is shared. -->
       <div class="mode-bar" id="modeBar">
-        <button data-mode="data">data</button>
-        <button data-mode="clip" class="on">clip</button>
-        <button data-mode="series">series</button>
-        <button data-mode="video">video</button>
-        <span class="mode-note" id="modeNote"></span>
+        <div class="tabs">
+          <button data-mode="data">data</button>
+          <button data-mode="clip" aria-selected="true">clip</button>
+          <button data-mode="series">series</button>
+          <button data-mode="video">video</button>
+        </div>
+        <span class="mode-note ht-type-small" id="modeNote"></span>
       </div>
 
       <!-- jobs queue: drop a jobs array (jobs/*.json) to load every item -->
-      <div id="jobsPanel" class="jobs-panel" hidden>
-        <div class="jobs-hdr">
-          <span id="jobsTitle" class="grow">jobs</span>
+      <div id="jobsPanel" class="panel u-full" hidden>
+        <div class="panel__header">
+          <span id="jobsTitle" class="u-grow">jobs</span>
           <button id="jobsClear">✕</button>
         </div>
-        <div id="jobsList" class="jobs-list"></div>
-        <div
-          style="
-            padding: 4px 6px;
-            font-size: 10px;
-            color: var(--dim);
-            border-top: 1px solid var(--border);
-          "
-        >
+        <div id="jobsList" class="list jobs-list"></div>
+        <footer class="panel__footer">
           <span id="jobsMsg"
             >drop the referenced images/audio too (any time) to auto-attach by
             filename</span
           >
-        </div>
+        </footer>
       </div>
 
-      <div class="drop-pair">
+      <div class="ht-arrange-row u-full">
         <div id="idrop" class="drop">
-          <span class="drop-lbl">image / video</span>
-          <span class="drop-sub">PNG · JPG · MP4 · MOV…</span>
+          <span class="drop__label">image / video</span>
+          <span class="drop__sub">PNG · JPG · MP4 · MOV…</span>
         </div>
-        <input id="ifi" type="file" accept="image/*,video/*" />
+        <input id="ifi" type="file" accept="image/*,video/*" hidden />
         <div id="adrop" class="drop">
-          <span class="drop-lbl">audio</span>
-          <span class="drop-sub">any format</span>
+          <span class="drop__label">audio</span>
+          <span class="drop__sub">any format</span>
         </div>
-        <input id="afi" type="file" accept="audio/*,video/*" />
+        <input id="afi" type="file" accept="audio/*,video/*" hidden />
       </div>
 
       <!-- video frame picker -->
@@ -961,22 +665,20 @@
         <input
           type="range"
           id="vScrub"
-          class="scrub-range"
           min="0"
           max="10000"
           value="0"
           step="1"
         />
-        <div
-          style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap"
-        >
+        <div class="ht-arrange-row u-full">
           <span
             id="vTimeEl"
-            style="color: var(--dim); font-size: 10px; min-width: 72px"
+            class="ht-type-small"
+            style="min-width: 72px"
           ></span>
           <button id="captureFrameBtn">+ snapshot</button>
           <button id="clearFramesBtn" style="display: none">clear all</button>
-          <label style="margin-left: auto; color: var(--dim)">layout</label>
+          <label class="u-end">layout</label>
           <select id="mosaicLayout">
             <option value="cols">cols</option>
             <option value="rows">rows</option>
@@ -990,7 +692,7 @@
 
       <!-- waveform editor -->
       <div class="wave-section" id="waveSection">
-        <canvas id="waveCoarse" class="wave-canvas"></canvas>
+        <canvas id="waveCoarse"></canvas>
         <div class="dr" id="zoomDr">
           <div class="dr-fill" id="zoomFill"></div>
           <input
@@ -1010,7 +712,7 @@
             step="1"
           />
         </div>
-        <canvas id="waveFine" class="wave-canvas"></canvas>
+        <canvas id="waveFine"></canvas>
         <div class="dr" id="trimDr">
           <div class="dr-fill" id="trimFill"></div>
           <input
@@ -1049,7 +751,7 @@
           />
           <button id="prevPlayBtn">▶</button>
           <button id="prevStopBtn">■</button>
-          <span id="trimDur" style="color: var(--dim); font-size: 10px"></span>
+          <span id="trimDur" class="ht-type-small"></span>
         </div>
       </div>
 
@@ -1057,7 +759,9 @@
            the trim region is the source window; chunks subdivide it. -->
       <div class="chunks-section" id="chunksSection">
         <div class="chunks-hdr">
-          <span class="grow">chunks (<span id="ckCount">0</span>)</span>
+          <span class="ht-type-eyebrow u-grow"
+            >chunks (<span id="ckCount">0</span>)</span
+          >
           <button id="ckSplitBtn" title="split the chunk under the caret (click the waveform to place it)">
             ÷ at caret
           </button>
@@ -1076,15 +780,15 @@
             <option value="array">jobs array</option>
           </select>
           <button id="ckCopyBtn">copy json</button>
-          <span id="ckMsg"></span>
+          <span id="ckMsg" class="ht-type-small"></span>
         </div>
       </div>
 
       <!-- settings panel -->
       <div class="settings-panel">
         <div class="sg sg-audio">
-          <div class="sg-hdr">audio</div>
-          <div class="sf">
+          <div class="sg-hdr ht-type-eyebrow">audio</div>
+          <div class="field">
             <label>rate</label>
             <input
               type="number"
@@ -1094,14 +798,14 @@
               max="65535"
             />
           </div>
-          <div class="sf">
+          <div class="field">
             <label>channels</label>
             <select id="eCh">
               <option value="1">mono</option>
               <option value="2">stereo</option>
             </select>
           </div>
-          <div class="sf" id="eLayoutWrap">
+          <div class="field" id="eLayoutWrap">
             <label>layout</label>
             <select id="eLayout">
               <option value="planar">planar</option>
@@ -1117,7 +821,7 @@
               title="block size (samples)"
             />
           </div>
-          <div class="sf">
+          <div class="field">
             <label>bits</label>
             <select id="eBits">
               <option value="8">8</option>
@@ -1125,22 +829,22 @@
               <option value="24">24</option>
             </select>
           </div>
-          <div class="sf">
+          <div class="field">
             <label>direction</label>
             <select id="eDir">
               <option value="fwd">fwd</option>
               <option value="rev">rev</option>
             </select>
           </div>
-          <div class="sf">
+          <div class="field">
             <label>mode</label>
             <select id="eMode">
               <option value="relabel">relabel</option>
               <option value="resample">resample</option>
             </select>
-            <span id="speedHint" class="sf-hint"></span>
+            <span id="speedHint" class="ht-type-small"></span>
           </div>
-          <div class="sf">
+          <div class="field">
             <label>normalize</label>
             <select id="eNorm">
               <option value="off">off</option>
@@ -1152,8 +856,8 @@
         </div>
 
         <div class="sg">
-          <div class="sg-hdr">steg</div>
-          <div class="sf">
+          <div class="sg-hdr ht-type-eyebrow">steg</div>
+          <div class="field">
             <label>traversal</label>
             <select id="eTraversal">
               <option>raster</option>
@@ -1171,7 +875,7 @@
               style="display: none; align-items: center; gap: 4px"
             ></span>
           </div>
-          <div class="sf">
+          <div class="field">
             <label>keymap</label>
             <select id="eKeymap">
               <option value="adjacent">adjacent</option>
@@ -1189,7 +893,7 @@
           <!-- channel plan: maps 1:1 to JSON { pack, channels:[{ch,combine}] }.
                each row is one slot (an active R/G/B channel + its combine op);
                row order = slot order. aligned caps the count to bytes/sample. -->
-          <div class="sf">
+          <div class="field">
             <label>channels</label>
             <select id="ePack">
               <option value="packed">packed</option>
@@ -1199,15 +903,15 @@
             <button id="chanAddBtn" type="button" title="add a channel slot">
               + slot
             </button>
-            <span style="color: var(--dim)">all</span>
+            <span class="u-faint">all</span>
             <select id="eAllCombine" title="set every slot's combine"></select>
-            <span id="packHint" class="sf-hint"></span>
+            <span id="packHint" class="ht-type-small"></span>
           </div>
           <div id="chanPlanRows" class="chan-plan-rows"></div>
-          <div class="sf">
-            <span id="reconLabel" class="sf-hint"></span>
+          <div class="field">
+            <span id="reconLabel" class="ht-type-small"></span>
           </div>
-          <div class="sf">
+          <div class="field">
             <label>aspect</label>
             <select id="eAspect">
               <option value="original">original</option>
@@ -1230,7 +934,7 @@
                 value="16"
                 step="1"
               />
-              <span style="color: var(--dim)">:</span>
+              <span class="u-faint">:</span>
               <input
                 type="number"
                 id="eAspectH"
@@ -1241,7 +945,7 @@
               />
             </span>
           </div>
-          <div class="sf">
+          <div class="field">
             <label>border +</label>
             <input
               type="number"
@@ -1257,9 +961,9 @@
       </div>
 
       <!-- additional entries -->
-      <div id="addlSection">
+      <div id="addlSection" class="u-full">
         <div class="entries-hdr">
-          <span>entries</span>
+          <span class="ht-type-eyebrow">entries</span>
           <button id="addTextBtn">+ text</button>
           <button id="addFileBtn">+ file</button>
           <button id="addTrackBtn">+ audio track</button>
@@ -1268,48 +972,44 @@
         <div id="trackRows"></div>
       </div>
 
-      <!-- encode action -->
-      <div class="action-row">
+      <!-- encode action (.action-row is a JS hook for the layout builder) -->
+      <div class="action-row ht-arrange-row u-full">
         <button id="encBtn" disabled>encode</button>
         <button id="dlBtn" style="display: none">↓ download</button>
         <button id="copyJsonBtn" title="copy this job as a jobs/*.json entry">
           copy as json
         </button>
-        <span id="sizeHint" style="color: var(--dim); font-size: 10px"></span>
-        <div
-          id="estats"
-          class="status"
-          style="flex: 1; text-align: right"
-        ></div>
+        <span id="sizeHint" class="ht-type-small"></span>
+        <div id="estats" class="status"></div>
       </div>
     </section>
 
     <!-- ═══ PLAYER (appears when STGC loaded) ═══ -->
     <section id="playerSection" hidden>
       <div class="player-hdr">
-        <span class="player-hdr-lbl">player</span>
+        <span class="ht-type-eyebrow u-grow">player</span>
         <button id="reconBtn" disabled>↓ reconstruct</button>
         <button id="pCloseBtn">✕ close</button>
       </div>
       <div id="displayRow">
         <div class="disp-col">
-          <div class="disp-lbl">encoded · plays → reconstructed</div>
+          <div class="ht-type-eyebrow">encoded · plays → reconstructed</div>
           <div class="img-wrap" id="imgWrap">
-            <canvas id="imgC" class="display"></canvas>
-            <canvas id="ov"></canvas>
+            <canvas id="imgC" class="display ht-media-flush"></canvas>
+            <canvas id="ov" class="ht-media-flush"></canvas>
           </div>
         </div>
         <div class="disp-col" id="reconCol">
-          <div class="disp-lbl">reconstructed</div>
+          <div class="ht-type-eyebrow">reconstructed</div>
           <div class="img-wrap">
-            <canvas id="reconC" class="display"></canvas>
+            <canvas id="reconC" class="display ht-media-flush"></canvas>
           </div>
         </div>
       </div>
       <div class="pbar" id="pbar" style="display: none">
         <button id="playBtn" disabled>▶ play</button>
         <button id="stopBtn" disabled>■ stop</button>
-        <span id="clock">0:00 / 0:00</span>
+        <span id="clock" class="u-faint">0:00 / 0:00</span>
       </div>
       <div id="pstatus" class="status"></div>
       <div id="pentryList"></div>
@@ -1921,12 +1621,12 @@
         if (!MODE_NOTES[m]) m = "clip";
         encMode = m;
         document.body.dataset.mode = m;
-        for (const b of modeBar.querySelectorAll("button"))
-          b.classList.toggle("on", b.dataset.mode === m);
+        for (const b of modeBar.querySelectorAll("button[data-mode]"))
+          b.setAttribute("aria-selected", b.dataset.mode === m);
         modeNote.textContent = MODE_NOTES[m];
         const [lbl, sub] = MODE_DROP[m];
-        if (!idrop.classList.contains("ready"))
-          idrop.innerHTML = `<span class="drop-lbl">${lbl}</span><span class="drop-sub">${sub}</span>`;
+        if (!idrop.hasAttribute("data-ready"))
+          idrop.innerHTML = `<span class="drop__label">${lbl}</span><span class="drop__sub">${sub}</span>`;
         ifi.accept = m === "video" ? "video/*" : "image/*";
         // series wants a whole set of covers at once
         ifi.multiple = m === "series";
@@ -2479,14 +2179,15 @@
         jobsArray.forEach((job, i) => {
           const { img, aud, haveImg, haveAud } = jobFilesStatus(job);
           const row = document.createElement("div");
-          row.className = "job-item" + (i === jobSel ? " sel" : "");
+          row.className = "list__item";
+          row.toggleAttribute("data-selected", i === jobSel);
           const label = baseName(job.out) || img || `item ${i + 1}`;
           const audioEnt = jobAudioEntry(job);
           const meta = `${(audioEnt || job).bits || 16}b·${(audioEnt || job).ch || 1}ch·${job.combine || "xor"}`;
           row.innerHTML =
-            `<span class="ji-idx">${i + 1}</span>` +
-            `<span class="ji-name">${escHtml(label)}</span>` +
-            `<span class="ji-meta">${escHtml(meta)}</span>` +
+            `<span class="list__index">${i + 1}</span>` +
+            `<span class="list__name">${escHtml(label)}</span>` +
+            `<span class="list__meta">${escHtml(meta)}</span>` +
             `<span class="ji-files">` +
             `<span class="${haveImg ? "ji-ok" : "ji-miss"}" title="${escHtml(img || "no image")}">img</span> ` +
             `<span class="${haveAud ? "ji-ok" : "ji-miss"}" title="${escHtml(aud || "no audio")}">aud</span>` +
@@ -2907,8 +2608,8 @@
         encFrameBlobUrl = URL.createObjectURL(file);
         frameVideoEl.src = encFrameBlobUrl;
         frameVideoEl.load();
-        idrop.innerHTML = `${escHtml(file.name)}<div class="drop-sub">video</div>`;
-        idrop.classList.add("ready");
+        idrop.innerHTML = `<span class="drop__label">${escHtml(file.name)}</span><span class="drop__sub">video</span>`;
+        idrop.setAttribute("data-ready", "");
         estats.textContent = "extracting audio from video…";
         if (!encActx) encActx = new AudioContext();
         encActx.resume().then(() => {
@@ -2918,8 +2619,8 @@
               (audioBuf) => {
                 encAudioBuf = audioBuf;
                 const d = audioBuf.duration;
-                adrop.innerHTML = `${escHtml(file.name)}<div class="drop-sub">${audioBuf.sampleRate}Hz · ${audioBuf.numberOfChannels}ch · ${d.toFixed(2)}s · video audio</div>`;
-                adrop.classList.add("ready");
+                adrop.innerHTML = `<span class="drop__label">${escHtml(file.name)}</span><span class="drop__sub">${audioBuf.sampleRate}Hz · ${audioBuf.numberOfChannels}ch · ${d.toFixed(2)}s · video audio</span>`;
+                adrop.setAttribute("data-ready", "");
                 estats.textContent = "";
                 onAudioLoaded();
               },
@@ -3124,29 +2825,30 @@
       const KEY_PRESERVING_COMBINES = Stegassette.KEY_PRESERVING;
       // Quality hints for the *full-res per-pair* path — only reached when no
       // channel is key-preserving (pure difference/noise/echo).
+      // A lossy path is marked with weight, not hue (amplib-ui has no colour).
       const RECON_QUALITY = {
         difference: (km) =>
           km === "adjacent"
-            ? { text: "recon: near-lossless", color: "#66bb88" }
-            : { text: "recon: approximate", color: "#aa8844" },
-        noise: () => ({ text: "recon: destructive", color: "#cc5555" }),
+            ? { text: "recon: near-lossless" }
+            : { text: "recon: approximate", warn: true },
+        noise: () => ({ text: "recon: destructive", warn: true }),
         echo: (km) =>
           km === "adjacent"
-            ? { text: "recon: key-exact ghost", color: "#66bb88" }
-            : { text: "recon: key-exact mirror ghost", color: "#66bb88" },
+            ? { text: "recon: key-exact ghost" }
+            : { text: "recon: key-exact mirror ghost" },
       };
       // Label follows the actual recon path the player will take for this plan.
       function updateReconLabel() {
         const combines = chanPlan.map((s) => s.combine);
         const allKP = combines.every((c) => KEY_PRESERVING_COMBINES.has(c));
         const someKP = combines.some((c) => KEY_PRESERVING_COMBINES.has(c));
-        let text, color;
+        let text, warn;
         if (allKP) {
           // every channel keeps its key pixel → half-res image of true cover px
-          ({ text, color } = { text: "recon: ½-res (real px)", color: "#66bb88" });
+          ({ text, warn } = { text: "recon: ½-res (real px)" });
         } else if (someKP) {
           // mixed: full-res per-pair pass decimated to half-res (all real/restored)
-          ({ text, color } = { text: "recon: ½-res (mixed)", color: "#66bb88" });
+          ({ text, warn } = { text: "recon: ½-res (mixed)" });
         } else {
           // pure difference/noise/echo → full-res per-pair reconstruction
           const q = RECON_QUALITY[representativeCombine()];
@@ -3154,10 +2856,10 @@
             reconLabel.textContent = "";
             return;
           }
-          ({ text, color } = q(eKeymap.value));
+          ({ text, warn } = q(eKeymap.value));
         }
         reconLabel.textContent = text;
-        reconLabel.style.color = color;
+        reconLabel.toggleAttribute("data-warn", !!warn);
       }
       eKeymap.addEventListener("change", updateReconLabel);
       updateReconLabel();
@@ -3177,12 +2879,12 @@
         input.addEventListener("change", (e) => take(e.target.files));
         zone.addEventListener("dragover", (e) => {
           e.preventDefault();
-          zone.classList.add("over");
+          zone.dataset.state = "over";
         });
-        zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+        zone.addEventListener("dragleave", () => delete zone.dataset.state);
         zone.addEventListener("drop", (e) => {
           e.preventDefault();
-          zone.classList.remove("over");
+          delete zone.dataset.state;
           take(e.dataTransfer.files);
         });
       }
@@ -3192,8 +2894,8 @@
         encFrameCanvases = [];
         encVideoFile = null;
         framePickerSection.classList.remove("on");
-        idrop.innerHTML = `${escHtml(file.name)}<div class="drop-sub">image</div>`;
-        idrop.classList.add("ready");
+        idrop.innerHTML = `<span class="drop__label">${escHtml(file.name)}</span><span class="drop__sub">image</span>`;
+        idrop.setAttribute("data-ready", "");
         checkEncReady();
       }
 
@@ -3208,8 +2910,8 @@
               (audioBuf) => {
                 encAudioBuf = audioBuf;
                 const d = audioBuf.duration;
-                adrop.innerHTML = `${file.name}<div class="drop-sub">${audioBuf.sampleRate}Hz · ${audioBuf.numberOfChannels}ch · ${d.toFixed(2)}s</div>`;
-                adrop.classList.add("ready");
+                adrop.innerHTML = `<span class="drop__label">${file.name}</span><span class="drop__sub">${audioBuf.sampleRate}Hz · ${audioBuf.numberOfChannels}ch · ${d.toFixed(2)}s</span>`;
+                adrop.setAttribute("data-ready", "");
                 estats.textContent = "";
                 onAudioLoaded();
               },
@@ -3490,14 +3192,14 @@
             } else continue;
           }
           const inTrim = i >= trimXS && i <= trimXE;
-          ctx.fillStyle = inTrim ? "#446688" : "#252525";
+          ctx.fillStyle = inTrim ? "#999" : "#2e2e2e";
           ctx.fillRect(i, (1 + mn) * amp, 1, Math.max(1, (mx - mn) * amp));
         }
         ctx.fillStyle = "rgba(0,0,0,0.55)";
         if (trimXS > 0) ctx.fillRect(0, 0, trimXS, H);
         if (trimXE < W) ctx.fillRect(trimXE, 0, W - trimXE, H);
         if (playX !== undefined) {
-          ctx.fillStyle = "#888";
+          ctx.fillStyle = "#fff";
           ctx.fillRect(Math.round(playX), 0, 1, H);
         }
       }
@@ -3519,9 +3221,9 @@
           drawChunkOverlay(ctx, W, H, 0, dur, (t) => (t / dur) * W);
           const zxS = zoomF0 * W,
             zxE = zoomF1 * W;
-          ctx.fillStyle = "rgba(51,85,187,0.12)";
+          ctx.fillStyle = "rgba(255,255,255,0.08)";
           ctx.fillRect(zxS, 0, zxE - zxS, H);
-          ctx.fillStyle = "rgba(51,85,187,0.45)";
+          ctx.fillStyle = "rgba(255,255,255,0.5)";
           ctx.fillRect(zxS, 0, 1, H);
           ctx.fillRect(zxE - 1, 0, 1, H);
         }
@@ -3567,7 +3269,7 @@
           ) {
             const scrubX = Math.round(((vScrubT - winS) / winDur) * W);
             if (scrubX >= 0 && scrubX <= W) {
-              ctx.fillStyle = "rgba(153,170,238,0.9)";
+              ctx.fillStyle = "rgba(255,255,255,0.9)";
               ctx.fillRect(scrubX, 0, 1, H);
             }
           }
@@ -3587,12 +3289,12 @@
           const x1 = Math.min(W, toX(Math.min(c.e, winS + winDur)) ?? W);
           if (!(x1 > x0)) return;
           ctx.fillStyle =
-            i === chunkSel ? "rgba(51,85,187,0.30)" : i % 2 ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.012)";
+            i === chunkSel ? "rgba(255,255,255,0.18)" : i % 2 ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.012)";
           ctx.fillRect(x0, 0, x1 - x0, H);
-          ctx.fillStyle = i === chunkSel ? "rgba(153,170,238,0.9)" : "rgba(153,170,238,0.35)";
+          ctx.fillStyle = i === chunkSel ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.35)";
           ctx.fillRect(x0, 0, 1, H);
           if (x1 - x0 > 16) {
-            ctx.fillStyle = i === chunkSel ? "#99aaee" : "#666";
+            ctx.fillStyle = i === chunkSel ? "#fff" : "#666";
             ctx.font = "9px monospace";
             ctx.fillText(String(i + 1).padStart(2, "0"), x0 + 3, 9);
           }
@@ -3600,8 +3302,8 @@
         if (seriesCaret != null) {
           const cx = toX(seriesCaret);
           if (cx != null) {
-            ctx.fillStyle = "#cc7744";
-            ctx.fillRect(Math.round(cx), 0, 1, H);
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(Math.round(cx) - 1, 0, 2, H);
           }
         }
       }
@@ -4540,8 +4242,8 @@
       document.addEventListener("dragleave", (e) => {
         if (!e.relatedTarget || !document.contains(e.relatedTarget)) {
           document.body.classList.remove("drag-audio", "drag-image");
-          adrop.classList.remove("over");
-          idrop.classList.remove("over");
+          delete adrop.dataset.state;
+          delete idrop.dataset.state;
         }
       });
 
