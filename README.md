@@ -70,6 +70,11 @@ working, their data saved per cartridge and deleted with it.
   across one or more images per track, with a cover cartridge holding
   metadata, ownership, timestamped lyrics, and the key that decrypts the
   tracks.
+- [make](make/) — the editor. Drop in an image and some audio and get a
+  cartridge back. Was make.stega.now's own repo.
+- [live](live/) — an homage to performances that have made me feel alive.
+  Screenshots of videos with the sound in their pixels. Was amplib.app/live.
+- [geese](geese/) — was amplib.app/geese-basement.
 - [me](me/) — a cartridge of you: record yourself, lay frames out in a
   template, and hide the recording's own audio in the picture — or record a
   message into images you already have.

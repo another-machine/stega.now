@@ -1,0 +1,11 @@
+{
+  "name": "stega-now",
+  "version": "1.0.0",
+  "description": "stega.now \u2014 the stegassette player, editor and galleries",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "codec:check": "node scripts/codec-check.js",
+    "codec:sync": "node scripts/codec-check.js --fix"
+  }
+}
