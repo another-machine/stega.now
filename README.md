@@ -78,9 +78,6 @@ working, their data saved per cartridge and deleted with it.
 - [me](me/) — a cartridge of you: record yourself, lay frames out in a
   template, and hide the recording's own audio in the picture — or record a
   message into images you already have.
-- [workout](workout/) — a band workout routine as a cartridge-ready page:
-  opens on today's session, tap exercises to mark them done, stopwatch in
-  the masthead. The program lives in [workout/ROUTINE.md](workout/ROUTINE.md).
 
 ---
 
