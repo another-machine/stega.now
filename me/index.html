@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>me</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 10px;
+        font: 11px/1.45 monospace;
+        background: #fff;
+        color: #000;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #000;
+          color: #fff;
+        }
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 1px solid;
+      }
+      button {
+        cursor: pointer;
+      }
+      h1 {
+        font-size: 11px;
+        font-weight: normal;
+        margin: 0 0 8px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+      fieldset {
+        border: 1px solid;
+        margin: 0 0 8px;
+        padding: 6px 8px;
+      }
+      legend {
+        padding: 0 4px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin: 3px 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 3px 8px;
+        align-items: center;
+        max-width: 460px;
+      }
+      .cols {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      table {
+        border-collapse: collapse;
+        margin: 4px 0;
+      }
+      th,
+      td {
+        border: 1px solid;
+        padding: 2px 5px;
+        text-align: left;
+      }
+      th {
+        font-weight: normal;
+        opacity: 0.7;
+      }
+      .drop {
+        border: 1px dashed;
+        padding: 12px;
+        text-align: center;
+        margin: 0 0 8px;
+      }
+      .drop.over {
+        outline: 2px solid;
+      }
+      /* a utility, so it has to beat the element-qualified rules below */
+      .hide {
+        display: none !important;
+      }
+      .dim {
+        opacity: 0.6;
+      }
+      .warn {
+        opacity: 1;
+      }
+      /* the camera, and the take being scrubbed */
+      video.live {
+        display: block;
+        width: 260px;
+        max-width: 100%;
+        background: #7773;
+      }
+      video.mir {
+        transform: scaleX(-1);
+      }
+      /* the layout being composed: the picture with one button per frame
+         over it, blended so the numbers read against any matte */
+      .stage {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+      }
+      .stage canvas {
+        display: block;
+      }
+      .slot {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed #fff9;
+        color: #fff;
+        background: none;
+        /* the picture underneath can be any colour, so the number carries its
+           own contrast rather than relying on the matte */
+        text-shadow: 0 0 3px #000, 0 0 6px #000;
+        line-height: 1;
+      }
+      .slot.on {
+        border: 2px solid #fff;
+      }
+      .slot.empty {
+        background: #0006;
+      }
+      #outImg {
+        display: block;
+        max-width: 300px;
+        border: 1px solid;
+      }
+      meter {
+        width: 90px;
+      }
+      /* the reveal: encoded on top, reconstruction underneath */
+      .rev {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+      }
+      .rev canvas {
+        display: block;
+        height: 42vh;
+        width: auto;
+        image-rendering: pixelated;
+      }
+      .rev canvas + canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      #pSeek {
+        width: 240px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>me</h1>
+    <div class="row">
+      <button id="tabMake">make one</button>
+      <button id="tabPlay">play one</button>
+      <span class="dim"
+        >a picture of you with your own voice hidden in its pixels</span
+      >
+    </div>
+
+    <!-- ═══ MAKE ════════════════════════════════════════════ -->
+    <section id="make">
+      <div class="cols">
+        <div>
+          <fieldset>
+            <legend>the picture</legend>
+            <div class="row">
+              <label
+                ><input type="radio" name="picsrc" value="camera" checked /> the
+                camera</label
+              >
+              <label
+                ><input type="radio" name="picsrc" value="images" /> images I
+                have</label
+              >
+            </div>
+
+            <div id="camBox">
+              <div class="row">
+                <button id="camStart">start the camera</button>
+                <button id="recStart" disabled>record</button>
+                <button id="recStop" class="hide">stop</button>
+                <label class="dim"
+                  ><input type="checkbox" id="mirror" checked /> mirror</label
+                >
+                <meter id="camLevel" min="0" max="1" value="0" class="hide"></meter>
+                <span id="camStatus" class="dim"></span>
+              </div>
+              <div class="row">
+                <video id="live" class="live hide" muted playsinline></video>
+                <div id="takeBox" class="hide">
+                  <video id="take" class="live" muted playsinline preload="auto"></video>
+                  <div class="row">
+                    <input id="scrub" type="range" min="0" max="1000" value="0" />
+                    <span id="scrubT" class="dim">0:00 / 0:00</span>
+                  </div>
+                  <div class="row">
+                    <button id="grab">grab into frame 1</button>
+                    <button id="spread">spread across every frame</button>
+                  </div>
+                </div>
+              </div>
+              <div class="dim">
+                record yourself, scrub to a moment you like, grab it into a
+                frame · or
+                <input type="file" id="vidFile" accept="video/*" hidden />
+                <button type="button" id="vidPick">use a video file</button>
+              </div>
+            </div>
+
+            <div id="imgBox" class="hide">
+              <div class="drop" id="imgDrop">
+                drop images here, or
+                <input type="file" id="imgFiles" accept="image/*" multiple hidden />
+                <button type="button" id="imgPick">choose images</button>
+                <div class="dim">
+                  they fill the frames in order, repeating if there are fewer
+                  images than frames
+                </div>
+              </div>
+              <div class="dim" id="imgStatus"></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>the sound</legend>
+            <div class="row">
+              <label
+                ><input type="radio" name="sndsrc" value="video" checked /> the
+                video's own audio</label
+              >
+              <label
+                ><input type="radio" name="sndsrc" value="message" /> a message I
+                record</label
+              >
+            </div>
+            <div class="row">
+              <button id="msgStart">record a message</button>
+              <button id="msgStop" class="hide">stop</button>
+              <meter id="msgLevel" min="0" max="1" value="0" class="hide"></meter>
+              <span id="msgStatus" class="dim"></span>
+            </div>
+            <div class="row">
+              <audio id="sndPreview" controls class="hide"></audio>
+            </div>
+            <div class="grid">
+              <span>bit depth</span>
+              <select id="aBits" title="8 bit is grainier, and half the pixels">
+                <option>8</option>
+                <option selected>16</option>
+              </select>
+              <span>sample rate</span>
+              <select id="aRate"></select>
+              <span>channels</span>
+              <select id="aCh">
+                <option selected>1</option>
+                <option>2</option>
+              </select>
+              <span>layout</span>
+              <select id="aLayout" title="how the channels sit inside the image">
+                <option selected>planar</option>
+                <option>interleaved</option>
+              </select>
+              <span>normalize</span>
+              <label
+                ><input type="checkbox" id="aNorm" checked /> to
+                <input id="aNormDb" type="number" value="-1" step="0.5" size="4" />
+                dBFS</label
+              >
+            </div>
+          </fieldset>
+        </div>
+
+        <div>
+          <fieldset>
+            <legend>the layout</legend>
+            <div class="grid">
+              <span>template</span><select id="tpl"></select>
+              <span>aspect</span><select id="asp"></select>
+              <span>gap</span>
+              <input
+                id="gap"
+                type="number"
+                value="0"
+                min="0"
+                max="0.2"
+                step="0.005"
+                size="5"
+                title="fraction of the short side"
+              />
+              <span>matte</span><input id="matte" type="color" value="#000000" />
+              <span>least size</span>
+              <input
+                id="minLong"
+                type="number"
+                value="600"
+                min="80"
+                max="4000"
+                step="20"
+                size="6"
+                title="smallest long edge, in pixels — the sound may ask for more"
+              />
+            </div>
+            <div class="row">
+              <div class="stage" id="stage"></div>
+            </div>
+            <div class="dim" id="slotHint">
+              click a frame to aim the next grab at it
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>the pattern</legend>
+            <div class="grid">
+              <span>combine</span><select id="sCombine"></select>
+              <span>traversal</span><select id="sTraversal"></select>
+              <span>keymap</span><select id="sKeymap"></select>
+              <span>packing</span><select id="sPack"></select>
+              <span>border</span>
+              <input
+                id="sBorder"
+                value="0.02"
+                size="6"
+                title="fraction of width, or whole px ≥ 1"
+              />
+            </div>
+            <div class="row">
+              <button id="sRandom">surprise me</button>
+              <span class="dim"
+                >combine decides how much the voice disturbs the picture ·
+                traversal is the order it fills, and the order it develops in as
+                it plays</span
+              >
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>whose it is</legend>
+            <div class="grid">
+              <span>from</span><input id="nFrom" placeholder="me" />
+              <span>to</span><input id="nTo" />
+              <span>note</span><input id="nNote" size="30" />
+            </div>
+          </fieldset>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="makeBtn" disabled>make the cartridge</button>
+        <progress id="mprog" value="0" max="1" class="hide"></progress>
+        <span id="mstatus" class="dim"></span>
+      </div>
+      <div class="dim" id="est"></div>
+      <div id="mout"></div>
+    </section>
+
+    <!-- ═══ PLAY ════════════════════════════════════════════ -->
+    <section id="play" class="hide">
+      <div class="drop" id="pdrop">
+        drop a cartridge PNG here, or
+        <input type="file" id="pfiles" accept="image/png" multiple hidden />
+        <button type="button" id="ppick">choose files</button>
+        <div class="dim">
+          any STGC cartridge with a PCM entry plays here — a stega-me one also
+          shows who it is from
+        </div>
+      </div>
+      <span id="pstatus" class="dim"></span>
+      <div id="pview" class="hide">
+        <div class="row">
+          <button id="pplay">play</button>
+          <input id="pSeek" type="range" min="0" max="1000" value="0" />
+          <span id="pTime" class="dim">0:00 / 0:00</span>
+          <label class="dim"><input type="checkbox" id="pLoop" /> loop</label>
+        </div>
+        <div class="cols">
+          <div id="pRev"></div>
+          <div>
+            <div id="pMeta"></div>
+            <div class="dim" id="pMethod"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script src="../lib/steg-core.js"></script>
+    <script src="../lib/reveal.js"></script>
+    <script src="me.js"></script>
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      const radio = (name) =>
+        document.querySelector(`input[name="${name}"]:checked`).value;
+
+      function setMode(m) {
+        $("make").classList.toggle("hide", m !== "make");
+        $("play").classList.toggle("hide", m !== "play");
+      }
+      $("tabMake").addEventListener("click", () => setMode("make"));
+      $("tabPlay").addEventListener("click", () => setMode("play"));
+
+      function wireDrop(el, onFiles) {
+        for (const t of ["dragenter", "dragover"])
+          el.addEventListener(t, (e) => {
+            e.preventDefault();
+            el.classList.add("over");
+          });
+        for (const t of ["dragleave", "drop"])
+          el.addEventListener(t, (e) => {
+            e.preventDefault();
+            el.classList.remove("over");
+          });
+        el.addEventListener("drop", (e) => {
+          e.preventDefault();
+          onFiles([...(e.dataTransfer.files || [])]);
+        });
+      }
+
+      // ═══ MAKE ══════════════════════════════════════════════
+      // slots[i] is what template frame i holds: { src, mirror, t }
+      let slots = [];
+      let take = null; // { videoBlob, audioBlob, ms, url, seconds }
+      let msg = null; // { audioBlob, ms }
+      let camStream = null,
+        camRec = null,
+        msgStream = null,
+        msgRec = null;
+      let stopCamMeter = null,
+        stopMsgMeter = null;
+      let aimed = 0; // the frame the next grab lands in
+      let recTimer = null;
+
+      // the menus come out of the format itself
+      for (const [id, list, def] of [
+        ["tpl", Me.TEMPLATES.map((t) => [t.id, t.label]), "quad"],
+        ["asp", Me.ASPECTS.map((a) => [a.id, a.id]), "1:1"],
+        ["sCombine", Me.METHODS.combine, Me.STEG.combine],
+        ["sTraversal", Me.METHODS.traversal, Me.STEG.traversal],
+        ["sKeymap", Me.METHODS.keymap, Me.STEG.keyMap],
+        ["sPack", Me.METHODS.pack, Me.STEG.pack],
+        ["aRate", Me.RATES.map((r) => [String(r), String(r)]), "22050"],
+      ]) {
+        $(id).innerHTML = list
+          .map((n) => {
+            const [v, label] = Array.isArray(n) ? n : [n, n];
+            return `<option value="${v}"${v === def ? " selected" : ""}>${label}</option>`;
+          })
+          .join("");
+      }
+
+      const stegChoice = () => ({
+        combine: $("sCombine").value,
+        traversal: $("sTraversal").value,
+        keyMap: $("sKeymap").value,
+        pack: $("sPack").value,
+        border: parseFloat($("sBorder").value) || 0,
+      });
+      const layoutChoice = () => ({
+        template: $("tpl").value,
+        aspect: $("asp").value,
+        gap: parseFloat($("gap").value) || 0,
+        matte: $("matte").value,
+      });
+      const audioChoice = () => ({
+        bits: +$("aBits").value,
+        rate: +$("aRate").value,
+        channels: +$("aCh").value,
+        layout: $("aLayout").value,
+      });
+      const normChoice = () => {
+        const db = parseFloat($("aNormDb").value);
+        return {
+          on: $("aNorm").checked,
+          db: Number.isFinite(db) ? Math.min(0, db) : -1,
+        };
+      };
+      const minLong = () => Math.max(80, +$("minLong").value || 600);
+
+      $("sRandom").addEventListener("click", () => {
+        const any = (a) => a[(Math.random() * a.length) | 0];
+        $("sCombine").value = any(Me.METHODS.combine);
+        $("sTraversal").value = any(Me.METHODS.traversal);
+        $("sKeymap").value = any(Me.METHODS.keymap);
+        estimate();
+      });
+
+      // ---- the frames ------------------------------------------
+      function syncSlots() {
+        const n = Me.templateById($("tpl").value).frames.length;
+        while (slots.length < n) slots.push(null);
+        slots.length = n;
+        if (aimed >= n) aimed = 0;
+      }
+      const filled = () => slots.filter((s) => s && s.src).length;
+
+      function drawStage() {
+        syncSlots();
+        const tpl = Me.templateById($("tpl").value);
+        const aspect = Me.aspectOf($("asp").value);
+        const long = 300;
+        const W = aspect >= 1 ? long : Math.round(long * aspect);
+        const H = aspect >= 1 ? Math.round(long / aspect) : long;
+        const lay = layoutChoice();
+        const cnv = Me.renderLayout(W, H, tpl, slots, {
+          gap: lay.gap,
+          matte: lay.matte,
+        });
+        const stage = $("stage");
+        stage.innerHTML = "";
+        stage.append(cnv);
+        tpl.frames.forEach((r, i) => {
+          const b = document.createElement("button");
+          b.className =
+            "slot" +
+            (i === aimed ? " on" : "") +
+            (slots[i] && slots[i].src ? "" : " empty");
+          b.style.left = r[0] * 100 + "%";
+          b.style.top = r[1] * 100 + "%";
+          b.style.width = r[2] * 100 + "%";
+          b.style.height = r[3] * 100 + "%";
+          b.textContent = String(i + 1);
+          b.title = "aim the next grab at frame " + (i + 1);
+          b.addEventListener("click", () => {
+            aimed = i;
+            drawStage();
+          });
+          stage.append(b);
+        });
+        $("grab").textContent = "grab into frame " + (aimed + 1);
+        $("slotHint").textContent = `${filled()}/${slots.length} frames filled · click one to aim the next grab at it`;
+        $("makeBtn").disabled = !filled() || !soundSeconds();
+        estimate();
+      }
+
+      function putFrame(i, src, t, mirror) {
+        slots[i] = { src, t, mirror: !!mirror };
+      }
+      // aim moves to the next empty frame, so grabbing repeatedly fills the
+      // layout without having to click each slot
+      function advance() {
+        const n = slots.length;
+        for (let k = 1; k <= n; k++) {
+          const i = (aimed + k) % n;
+          if (!slots[i] || !slots[i].src) {
+            aimed = i;
+            return;
+          }
+        }
+      }
+
+      for (const id of ["tpl", "asp", "gap", "matte"])
+        $(id).addEventListener("change", drawStage);
+      $("gap").addEventListener("input", drawStage);
+      $("mirror").addEventListener("change", () => {
+        const on = $("mirror").checked;
+        $("live").classList.toggle("mir", on);
+        $("take").classList.toggle("mir", on);
+        // a mirror is a way of looking at the frame, not a property of it, so
+        // it applies to everything the camera has given us so far
+        for (const s of slots) if (s && s.fromCamera) s.mirror = on;
+        drawStage();
+      });
+
+      // ---- the camera ------------------------------------------
+      function picMode() {
+        const m = radio("picsrc");
+        $("camBox").classList.toggle("hide", m !== "camera");
+        $("imgBox").classList.toggle("hide", m !== "images");
+      }
+      for (const r of document.querySelectorAll('input[name="picsrc"]'))
+        r.addEventListener("change", picMode);
+
+      $("camStart").addEventListener("click", async () => {
+        if (camStream) {
+          if (camRec) {
+            $("camStatus").textContent = "stop the recording first";
+            return;
+          }
+          Me.closeStream(camStream);
+          camStream = null;
+          if (stopCamMeter) stopCamMeter();
+          stopCamMeter = null;
+          $("live").classList.add("hide");
+          $("camLevel").classList.add("hide");
+          $("camStart").textContent = "start the camera";
+          $("recStart").disabled = true;
+          return;
+        }
+        try {
+          camStream = await Me.openCamera({ video: true });
+        } catch (err) {
+          $("camStatus").textContent = "✗ " + err.message;
+          return;
+        }
+        const live = $("live");
+        live.srcObject = camStream;
+        live.classList.remove("hide");
+        live.classList.toggle("mir", $("mirror").checked);
+        await live.play().catch(() => {});
+        $("camStart").textContent = "stop the camera";
+        $("recStart").disabled = false;
+        $("camStatus").textContent = "";
+        $("camLevel").classList.remove("hide");
+        stopCamMeter = Me.meter(camStream, (v) => ($("camLevel").value = v));
+      });
+
+      $("recStart").addEventListener("click", () => {
+        if (!camStream) return;
+        try {
+          camRec = Me.record(camStream, { video: true });
+        } catch (err) {
+          $("camStatus").textContent = "✗ " + err.message;
+          return;
+        }
+        const t0 = performance.now();
+        recTimer = setInterval(() => {
+          $("camStatus").textContent =
+            "recording " + Me.fmtTime((performance.now() - t0) / 1000);
+        }, 200);
+        $("recStart").classList.add("hide");
+        $("recStop").classList.remove("hide");
+      });
+
+      $("recStop").addEventListener("click", async () => {
+        if (!camRec) return;
+        clearInterval(recTimer);
+        $("recStop").classList.add("hide");
+        $("recStart").classList.remove("hide");
+        const t = await camRec.stop();
+        camRec = null;
+        await useTake(t.videoBlob, t.audioBlob, t.ms / 1000);
+      });
+
+      $("vidPick").addEventListener("click", () => $("vidFile").click());
+      $("vidFile").addEventListener("change", (e) => {
+        const f = e.target.files[0];
+        // a supplied file is its own sound too — the audio comes back out of
+        // it with decodeAudioData, which is a container question, so it is
+        // reported at build time if the browser won't do it
+        if (f) useTake(f, f, null);
+      });
+
+      async function useTake(videoBlob, audioBlob, seconds) {
+        if (take && take.url) URL.revokeObjectURL(take.url);
+        const url = URL.createObjectURL(videoBlob);
+        take = { videoBlob, audioBlob, url, seconds };
+        const v = $("take");
+        v.src = url;
+        v.classList.toggle("mir", $("mirror").checked);
+        $("takeBox").classList.remove("hide");
+        await new Promise((res) => {
+          if (v.readyState >= 1) return res();
+          v.addEventListener("loadedmetadata", res, { once: true });
+        });
+        const dur = await Me.durationOf(v);
+        take.seconds = Number.isFinite(dur) && dur > 0 ? dur : seconds || 0;
+        $("camStatus").textContent = "a take of " + Me.fmtTime(take.seconds);
+        document.querySelector(
+          'input[name="sndsrc"][value="video"]',
+        ).checked = true;
+        sndMode();
+        await spread();
+        showScrub();
+      }
+
+      function showScrub() {
+        const v = $("take");
+        $("scrubT").textContent =
+          Me.fmtTime(v.currentTime) + " / " + Me.fmtTime(take ? take.seconds : 0);
+      }
+      $("scrub").addEventListener("input", async () => {
+        if (!take || !take.seconds) return;
+        await Me.seekTo($("take"), (+$("scrub").value / 1000) * take.seconds);
+        showScrub();
+      });
+      $("grab").addEventListener("click", () => {
+        if (!take) return;
+        const v = $("take");
+        putFrame(aimed, Me.still(v), v.currentTime, $("mirror").checked);
+        slots[aimed].fromCamera = true;
+        advance();
+        drawStage();
+      });
+      $("spread").addEventListener("click", () => spread());
+
+      // one click that fills the whole layout: a frame from each equal share
+      // of the take, in order
+      async function spread() {
+        if (!take || !take.seconds) return;
+        syncSlots();
+        const v = $("take");
+        const n = slots.length;
+        for (let i = 0; i < n; i++) {
+          const t = ((i + 0.5) / n) * take.seconds;
+          putFrame(i, await Me.frameAt(v, t), t, $("mirror").checked);
+          slots[i].fromCamera = true;
+        }
+        aimed = 0;
+        drawStage();
+        showScrub();
+      }
+
+      // ---- images ---------------------------------------------
+      async function takeImages(files) {
+        const imgs = files.filter((f) => /^image\//.test(f.type));
+        if (!imgs.length) {
+          $("imgStatus").textContent = "no images in that";
+          return;
+        }
+        syncSlots();
+        const bmps = [];
+        for (const f of imgs) {
+          try {
+            bmps.push(await createImageBitmap(f));
+          } catch (_) {}
+        }
+        if (!bmps.length) {
+          $("imgStatus").textContent = "none of those would decode";
+          return;
+        }
+        for (let i = 0; i < slots.length; i++)
+          putFrame(i, bmps[i % bmps.length], null, false);
+        $("imgStatus").textContent =
+          bmps.length + (bmps.length === 1 ? " image" : " images") + " placed";
+        drawStage();
+      }
+      $("imgPick").addEventListener("click", () => $("imgFiles").click());
+      $("imgFiles").addEventListener("change", (e) =>
+        takeImages([...e.target.files]),
+      );
+      wireDrop($("imgDrop"), takeImages);
+
+      // ---- the sound ------------------------------------------
+      let sndUrl = null;
+      function sndMode() {
+        const m = radio("sndsrc");
+        const src =
+          m === "video" ? take && take.audioBlob : msg && msg.audioBlob;
+        const el = $("sndPreview");
+        if (sndUrl) URL.revokeObjectURL(sndUrl);
+        sndUrl = null;
+        if (src) {
+          sndUrl = URL.createObjectURL(src);
+          el.src = sndUrl;
+          el.classList.remove("hide");
+        } else {
+          el.removeAttribute("src");
+          el.classList.add("hide");
+        }
+        drawStage();
+      }
+      for (const r of document.querySelectorAll('input[name="sndsrc"]'))
+        r.addEventListener("change", sndMode);
+
+      function soundSeconds() {
+        return radio("sndsrc") === "video"
+          ? take && take.seconds
+            ? take.seconds
+            : 0
+          : msg && msg.seconds
+            ? msg.seconds
+            : 0;
+      }
+
+      $("msgStart").addEventListener("click", async () => {
+        try {
+          msgStream = await Me.openCamera({ video: false });
+          msgRec = Me.record(msgStream, { video: false });
+        } catch (err) {
+          $("msgStatus").textContent = "✗ " + err.message;
+          return;
+        }
+        const t0 = performance.now();
+        recTimer = setInterval(() => {
+          $("msgStatus").textContent =
+            "recording " + Me.fmtTime((performance.now() - t0) / 1000);
+        }, 200);
+        $("msgLevel").classList.remove("hide");
+        stopMsgMeter = Me.meter(msgStream, (v) => ($("msgLevel").value = v));
+        $("msgStart").classList.add("hide");
+        $("msgStop").classList.remove("hide");
+      });
+
+      $("msgStop").addEventListener("click", async () => {
+        if (!msgRec) return;
+        clearInterval(recTimer);
+        $("msgStop").classList.add("hide");
+        $("msgStart").classList.remove("hide");
+        $("msgLevel").classList.add("hide");
+        const t = await msgRec.stop();
+        msgRec = null;
+        if (stopMsgMeter) stopMsgMeter();
+        stopMsgMeter = null;
+        Me.closeStream(msgStream);
+        msgStream = null;
+        msg = { audioBlob: t.audioBlob, seconds: t.ms / 1000 };
+        $("msgStatus").textContent = "a message of " + Me.fmtTime(msg.seconds);
+        document.querySelector(
+          'input[name="sndsrc"][value="message"]',
+        ).checked = true;
+        sndMode();
+      });
+
+      // ---- what it will cost ----------------------------------
+      function estimate() {
+        const secs = soundSeconds();
+        if (!secs) {
+          $("est").textContent = "";
+          return;
+        }
+        const a = audioChoice();
+        const p = Me.plan({
+          seconds: secs,
+          rate: a.rate,
+          bits: a.bits,
+          channels: a.channels,
+          aspect: Me.aspectOf($("asp").value),
+          steg: stegChoice(),
+          minLong: minLong(),
+        });
+        $("est").textContent =
+          `${Me.fmtTime(secs)} of sound · ${(p.pcmBytes / 1048576).toFixed(2)} MB of ` +
+          `${a.bits}-bit PCM → ${p.W}×${p.H} px at ${p.bpp} byte${p.bpp === 1 ? "" : "s"} ` +
+          `per data pixel` +
+          (p.pack !== "packed" ? ` (${p.pack})` : "") +
+          ` · the sound reaches ${Math.round(p.fill * 100)}% of the picture` +
+          (p.fill < 0.9
+            ? ` — a smaller least size (or a higher rate or bit depth) makes it develop all the way`
+            : "");
+      }
+      for (const id of [
+        "aBits",
+        "aRate",
+        "aCh",
+        "aLayout",
+        "aNorm",
+        "aNormDb",
+        "sCombine",
+        "sTraversal",
+        "sKeymap",
+        "sPack",
+        "sBorder",
+        "minLong",
+      ])
+        $(id).addEventListener("change", estimate);
+      for (const id of ["sBorder", "minLong", "aNormDb"])
+        $(id).addEventListener("input", estimate);
+
+      // ---- make it --------------------------------------------
+      $("makeBtn").addEventListener("click", async () => {
+        const src =
+          radio("sndsrc") === "video"
+            ? take && take.audioBlob
+            : msg && msg.audioBlob;
+        if (!src) {
+          $("mstatus").textContent = "✗ no sound yet";
+          return;
+        }
+        $("makeBtn").disabled = true;
+        $("mprog").classList.remove("hide");
+        $("mout").innerHTML = "";
+        try {
+          const a = audioChoice();
+          $("mstatus").textContent = "reading the sound";
+          let decoded;
+          try {
+            decoded = await Me.decodeAudioBlob(src, a.rate, a.channels);
+          } catch (err) {
+            throw new Error(
+              "this browser wouldn't decode that audio (" +
+                (err.message || err.name) +
+                ") — record it here instead of supplying a file",
+            );
+          }
+          const out = await Me.build({
+            kind: radio("picsrc") === "camera" ? "video" : "image",
+            note: {
+              from: $("nFrom").value,
+              to: $("nTo").value,
+              note: $("nNote").value,
+            },
+            layout: layoutChoice(),
+            frames: slots,
+            audio: {
+              channels: decoded.channels,
+              rate: a.rate,
+              bits: a.bits,
+              layout: a.layout,
+              source: radio("sndsrc"),
+            },
+            steg: stegChoice(),
+            normalize: normChoice(),
+            minLong: minLong(),
+            onProgress: (m, p) => {
+              $("mstatus").textContent = m;
+              $("mprog").value = p;
+            },
+          });
+          const url = URL.createObjectURL(out.blob);
+          $("mout").innerHTML =
+            `<div class="row"><img id="outImg" src="${url}" alt="the cartridge"></div>` +
+            `<div class="row"><a href="${url}" download="${out.name}">download ${out.name}</a>` +
+            `<span class="dim">${out.width}×${out.height} · ` +
+            `${(out.blob.size / 1048576).toFixed(2)} MB · ` +
+            `${out.info.steg.combine} / ${out.info.steg.traversal} / ${out.info.steg.keyMap}` +
+            `${out.info.steg.pack !== "packed" ? " / " + out.info.steg.pack : ""} · ` +
+            `${out.info.audio.bits}-bit ${out.info.audio.rate} Hz × ${out.info.audio.channels}ch` +
+            `</span><button id="playIt">play it here</button></div>`;
+          $("playIt").addEventListener("click", () => {
+            setMode("play");
+            loadCartridge(out.blob, out.name);
+          });
+          $("mstatus").textContent = "made";
+        } catch (err) {
+          $("mstatus").textContent = "✗ " + err.message;
+        }
+        $("mprog").classList.add("hide");
+        $("makeBtn").disabled = false;
+      });
+
+      picMode();
+      sndMode();
+      drawStage();
+
+      // ═══ PLAY ══════════════════════════════════════════════
+      let pctx = null,
+        psrc = null,
+        ptimer = null,
+        prev = null,
+        pAudio = null,
+        pDur = 0,
+        pStart = 0,
+        pPlaying = false;
+
+      function stopPlay() {
+        if (psrc) {
+          try {
+            psrc.onended = null;
+            psrc.stop();
+          } catch (_) {}
+          psrc = null;
+        }
+        clearInterval(ptimer);
+        pPlaying = false;
+        $("pplay").textContent = "play";
+      }
+
+      async function loadCartridge(blob, name) {
+        stopPlay();
+        $("pstatus").textContent = "reading " + (name || "the cartridge");
+        try {
+          const c = await Me.read(blob);
+          if (!c.audioEntry) throw new Error("no sound in this one");
+          pAudio = Me.audioOf(c.audioEntry);
+          pDur = pAudio.seconds;
+          prev = Reveal.build(c.img, c.opts, c.audioEntry);
+          $("pRev").innerHTML = "";
+          $("pRev").append(prev.el);
+          const i = c.info;
+          $("pMeta").innerHTML = i
+            ? `<table>` +
+              [
+                ["from", i.from || "—"],
+                ["to", i.to || "—"],
+                ["note", i.note || "—"],
+                ["made", (i.created || "").replace("T", " ").slice(0, 16)],
+                [
+                  "picture",
+                  `${i.picture.template} · ${i.picture.aspect} · ` +
+                    `${i.picture.frames.filter((f) => f.filled).length} frames`,
+                ],
+                [
+                  "sound",
+                  `${i.audio.bits}-bit ${i.audio.rate} Hz × ${i.audio.channels}ch · ` +
+                    `${Me.fmtTime(i.audio.durationMs / 1000)} · ${i.audio.source}`,
+                ],
+              ]
+                .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
+                .join("") +
+              `</table>`
+            : `<div class="dim">not a stega-me cartridge — playing its sound anyway</div>`;
+          $("pMethod").textContent =
+            `${c.opts.combine} / ${c.opts.traversal} / ${c.opts.keyMap}` +
+            (c.opts.pack !== "packed" ? " / " + c.opts.pack : "") +
+            ` · ${c.img.width}×${c.img.height}`;
+          $("pview").classList.remove("hide");
+          $("pstatus").textContent = name || "";
+          $("pTime").textContent = "0:00 / " + Me.fmtTime(pDur);
+          $("pSeek").value = 0;
+        } catch (err) {
+          $("pview").classList.add("hide");
+          $("pstatus").textContent = "✗ " + err.message;
+        }
+      }
+
+      function playFrom(sec) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        pctx = pctx || new AC();
+        stopPlay();
+        const { channels, fmt, frames } = pAudio;
+        const buf = pctx.createBuffer(fmt.channels, frames, fmt.rate);
+        for (let c = 0; c < fmt.channels; c++)
+          buf.getChannelData(c).set(channels[c]);
+        psrc = pctx.createBufferSource();
+        psrc.buffer = buf;
+        psrc.loop = $("pLoop").checked;
+        psrc.connect(pctx.destination);
+        // the picture stays developed when it finishes — that is the payoff —
+        // but the playhead goes back to the top, ready to run it again
+        psrc.onended = () => {
+          stopPlay();
+          $("pSeek").value = 0;
+          $("pTime").textContent = "0:00 / " + Me.fmtTime(pDur);
+        };
+        pStart = pctx.currentTime - sec;
+        psrc.start(0, sec);
+        pPlaying = true;
+        $("pplay").textContent = "stop";
+        if (prev) {
+          prev.reset();
+          prev.seek(sec / pDur);
+        }
+        let last = sec;
+        ptimer = setInterval(() => {
+          const raw = pctx.currentTime - pStart;
+          const t = psrc && psrc.loop ? raw % pDur : Math.min(pDur, raw);
+          $("pSeek").value = Math.round((t / pDur) * 1000);
+          $("pTime").textContent = Me.fmtTime(t) + " / " + Me.fmtTime(pDur);
+          if (prev) {
+            if (t < last) prev.reset(); // looped — develop it again
+            prev.seek(t / pDur);
+          }
+          last = t;
+        }, 60);
+      }
+
+      $("pplay").addEventListener("click", () => {
+        if (!pAudio) return;
+        if (pPlaying) return stopPlay();
+        playFrom((+$("pSeek").value / 1000) * pDur);
+      });
+      $("pLoop").addEventListener("change", () => {
+        if (psrc) psrc.loop = $("pLoop").checked;
+      });
+      // dropping the playhead re-develops the picture from that point
+      $("pSeek").addEventListener("change", () => {
+        if (!pAudio) return;
+        const t = (+$("pSeek").value / 1000) * pDur;
+        if (pPlaying) return playFrom(t);
+        $("pTime").textContent = Me.fmtTime(t) + " / " + Me.fmtTime(pDur);
+        if (prev) {
+          prev.reset();
+          prev.seek(t / pDur);
+        }
+      });
+
+      const takeCart = (files) => {
+        const f = files.find((x) => /\.png$/i.test(x.name));
+        if (f) loadCartridge(f, f.name);
+        else $("pstatus").textContent = "no PNG in that";
+      };
+      $("ppick").addEventListener("click", () => $("pfiles").click());
+      $("pfiles").addEventListener("change", (e) => takeCart([...e.target.files]));
+      wireDrop($("pdrop"), takeCart);
+    </script>
+  </body>
+</html>

@@ -70,6 +70,9 @@ working, their data saved per cartridge and deleted with it.
   across one or more images per track, with a cover cartridge holding
   metadata, ownership, timestamped lyrics, and the key that decrypts the
   tracks.
+- [me](me/) — a cartridge of you: record yourself, lay frames out in a
+  template, and hide the recording's own audio in the picture — or record a
+  message into images you already have.
 
 ---
 
