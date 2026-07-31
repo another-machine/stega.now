@@ -49,6 +49,20 @@
       .entry p {
         margin: 0;
       }
+      /* Tools and works side by side, one column when narrow. ht-arrange-grid
+         already does the collapse with auto-fit, so this only raises the
+         per-column floor — the stock 12rem would split at about 400px, which
+         is still a phone. */
+      .columns {
+        --ht-grid-min: 20rem;
+        align-items: start;
+        gap: var(--ht-flow-section);
+        width: 100%;
+        /* Stacked, the row gap puts a section's worth of space above works,
+           while above tools there is only the body gap. Make up the
+           difference so both headings breathe the same. */
+        margin-block-start: calc(var(--ht-flow-section) - var(--ht-flow));
+      }
     </style>
   </head>
   <body data-theme="auto" data-density="compact">
@@ -64,44 +78,48 @@
       </p>
     </section>
 
-    <section>
-      <p class="ht-type-eyebrow">Tools</p>
+    <div class="ht-arrange-grid columns">
+      <section>
+        <p class="ht-type-eyebrow">Tools</p>
 
-      <div class="entry">
-        <h2><a href="album/">album</a></h2>
-        <p class="ht-type-prose u-dim">build and play albums.</p>
-      </div>
+        <div class="entry">
+          <h2><a href="album/">album</a></h2>
+          <p class="ht-type-prose u-dim">build and play albums.</p>
+        </div>
 
-      <div class="entry">
-        <h2><a href="home/">home</a></h2>
-        <p class="ht-type-prose u-dim">offline library for your stegassettes</p>
-      </div>
+        <div class="entry">
+          <h2><a href="home/">home</a></h2>
+          <p class="ht-type-prose u-dim">
+            offline library for your stegassettes
+          </p>
+        </div>
 
-      <div class="entry">
-        <h2><a href="make/">make</a></h2>
-        <p class="ht-type-prose u-dim">make a stegassette</p>
-      </div>
+        <div class="entry">
+          <h2><a href="make/">make</a></h2>
+          <p class="ht-type-prose u-dim">make a stegassette</p>
+        </div>
 
-      <div class="entry">
-        <h2><a href="me/">me</a></h2>
-        <p class="ht-type-prose u-dim">stegassette selfies</p>
-      </div>
-    </section>
+        <div class="entry">
+          <h2><a href="me/">me</a></h2>
+          <p class="ht-type-prose u-dim">stegassette selfies</p>
+        </div>
+      </section>
 
-    <section>
-      <p class="ht-type-eyebrow">Works</p>
+      <section>
+        <p class="ht-type-eyebrow">Works</p>
 
-      <div class="entry">
-        <h2><a href="geese/">geese</a></h2>
-        <p class="ht-type-prose u-dim">artifacts of geese from the basement</p>
-      </div>
+        <div class="entry">
+          <h2><a href="geese/">geese</a></h2>
+          <p class="ht-type-prose u-dim">artifacts of geese from the basement</p>
+        </div>
 
-      <div class="entry">
-        <h2><a href="live/">live</a></h2>
-        <p class="ht-type-prose u-dim">
-          an homage to performances that have made me feel alive.
-        </p>
-      </div>
-    </section>
+        <div class="entry">
+          <h2><a href="live/">live</a></h2>
+          <p class="ht-type-prose u-dim">
+            an homage to performances that have made me feel alive.
+          </p>
+        </div>
+      </section>
+    </div>
   </body>
 </html>
