@@ -877,13 +877,22 @@
           </div>
           <div class="field">
             <label>keymap</label>
+            <!-- Two kinds, kept visibly apart because they change the shape of
+                 the encode, not just where the key is read from. The keyless
+                 pair generates the key from position, so no pixel is held back:
+                 the image is about half the area and the cover is gone. -->
             <select id="eKeymap">
-              <option value="adjacent">adjacent</option>
-              <option value="poles">poles</option>
-              <option value="mirror-x">mirror-x</option>
-              <option value="mirror-y">mirror-y</option>
-              <option value="offset">offset</option>
-              <option value="rotate">rotate</option>
+              <optgroup label="key pixel">
+                <option value="adjacent">adjacent</option>
+                <option value="poles">poles</option>
+                <option value="mirror-x">mirror-x</option>
+                <option value="mirror-y">mirror-y</option>
+                <option value="offset">offset</option>
+                <option value="rotate">rotate</option>
+              </optgroup>
+              <optgroup label="keyless — half size">
+                <option value="none">none</option>
+              </optgroup>
             </select>
             <span
               id="keymapParams"
@@ -1286,7 +1295,13 @@
                   data: reconData,
                   width: reconW,
                   height: reconH,
-                } = Stegassette.computeRecon(encImg, pathIdx, opts);
+                  // Was Stegassette.computeRecon(encImg, pathIdx, opts), which
+                  // the bundle no longer exports — the call threw. The current
+                  // name derives the path itself, so pathIdx is not passed.
+                  // For a keyless encode this returns the border ring with the
+                  // interior blanked: there is no cover held in key pixels to
+                  // recover, so the reveal empties rather than develops.
+                } = Stegassette.reconstructCover(encImg, opts);
                 // Draw reconData as permanent base layer on ic; encoded image as overlay on oc.
                 // reconData lives at its native resolution (full W×H, or half for
                 // the real-only path) — drawn scaled up to the display canvas.
@@ -1375,6 +1390,9 @@
         const lx = v % IW,
           ly = (v / IW) | 0;
         oc.clearRect((lx + B) * sc, (ly + B) * sc, ps, ps);
+        // Keyless has no paired key pixel to clear — every interior pixel is a
+        // data pixel, so the checkerboard this pairing avoids cannot arise.
+        if (Stegassette.KEYLESS_KEYMAPS.has(opts.keymap)) return;
         const [klx, kly] = Stegassette.KEYMAP[opts.keymap](lx, ly, IW, IH, opts.params || {});
         oc.clearRect((klx + B) * sc, (kly + B) * sc, ps, ps);
       }
@@ -1747,6 +1765,9 @@
         packHint.textContent = aligned
           ? `aligned · ${chanPlan.length} ch/sample (1 sample → 1 pixel)`
           : `packed · ${chanPlan.length}/3 ch · ${Math.round((chanPlan.length / 3) * 100)}% density`;
+        // The per-slot selects are rebuilt here, so whatever a keyless keymap
+        // disabled has to be re-applied to the fresh options.
+        updateCombineAvailability?.();
       }
 
       chanAddBtn.addEventListener("click", () => {
@@ -1840,6 +1861,7 @@
           if (kxEl) kxEl.value = j.kx ?? 0;
           if (kyEl) kyEl.value = j.ky ?? 0;
         }
+        updateCombineAvailability?.();
         setSel(eBorderEl, j.border);
         // aspect
         if (Array.isArray(j.aspect)) {
@@ -2804,6 +2826,18 @@
       eTraversal.addEventListener("change", updateTravParams);
       updateTravParams();
 
+      // A keyless keymap generates its key from position instead of reading a
+      // pixel, so nothing is held back and every interior pixel carries payload.
+      //
+      // A function declaration, not a const arrow, on purpose: renderChanPlan()
+      // runs during init — hundreds of lines above this one — and calls
+      // updateCombineAvailability, which calls this. A const would still be in
+      // its temporal dead zone at that point, and the ReferenceError would abort
+      // the rest of this script, silently leaving every later listener unbound.
+      function isKeyless(km) {
+        return Stegassette.KEYLESS_KEYMAPS.has(km);
+      }
+
       const keymapParams = document.getElementById("keymapParams");
       function updateKeymapParams() {
         keymapParams.innerHTML = "";
@@ -2819,6 +2853,43 @@
       }
       eKeymap.addEventListener("change", updateKeymapParams);
       updateKeymapParams();
+
+      // Combines that rewrite the key pixel need a key pixel to write to.
+      // Disable rather than hide, so the option list stays the same shape and
+      // it is visible *why* a choice went away.
+      function updateCombineAvailability() {
+        const keyless = isKeyless(eKeymap.value);
+        document
+          .querySelectorAll("#eAllCombine option, .cr-cm option")
+          .forEach((opt) => {
+            // The channel-plan rows render options with no value attribute, so
+            // value falls through to the label — pin it before relabelling, or
+            // the annotation below silently becomes the option's value.
+            const name = opt.value;
+            opt.value = name;
+            const blocked = keyless && !!Stegassette.KEY_MOD[name];
+            opt.disabled = blocked;
+            opt.textContent = blocked ? `${name} — needs a key pixel` : name;
+          });
+        // Anything already selected that just became invalid falls back to xor.
+        let changed = false;
+        document.querySelectorAll("#eAllCombine, .cr-cm").forEach((sel) => {
+          if (keyless && Stegassette.KEY_MOD[sel.value]) {
+            sel.value = "xor";
+            changed = true;
+          }
+        });
+        if (changed) {
+          for (const s of chanPlan)
+            if (Stegassette.KEY_MOD[s.combine]) s.combine = "xor";
+          eAllCombine.value = chanPlan[0].combine;
+          // Deliberately not calling updateReconLabel() here: it closes over
+          // consts declared below, and this runs during init from
+          // renderChanPlan. The keymap 'change' listener already calls it, and
+          // is attached after this one, so it sees the corrected plan.
+        }
+      }
+      eKeymap.addEventListener("change", updateCombineAvailability);
 
       // These ops keep the key pixel intact, so the player can reconstruct from
       // real pixels at half resolution.
@@ -2839,6 +2910,21 @@
       };
       // Label follows the actual recon path the player will take for this plan.
       function updateReconLabel() {
+        // Keyless outranks the combine: with no key pixel there is nothing
+        // holding a cover value, so no combine can make the image recoverable.
+        if (isKeyless(eKeymap.value)) {
+          // Keyless has no key pixel, so no combine can bring the cover back —
+          // but a channel left OUT of the plan is never written at all, and
+          // survives at full resolution. That is the only picture such an
+          // encode has, and it is worth naming.
+          const carrying = new Set(chanPlan.map((s) => s.ch));
+          const kept = ["r", "g", "b"].filter((c) => !carrying.has(c));
+          reconLabel.textContent = kept.length
+            ? `recon: full-res (${kept.join("+").toUpperCase()} real) · ½ area`
+            : "recon: none — keyless, all channels carry · ½ area";
+          reconLabel.toggleAttribute("data-warn", !kept.length);
+          return;
+        }
         const combines = chanPlan.map((s) => s.combine);
         const allKP = combines.every((c) => KEY_PRESERVING_COMBINES.has(c));
         const someKP = combines.some((c) => KEY_PRESERVING_COMBINES.has(c));
