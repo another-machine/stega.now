@@ -17,8 +17,23 @@
     </script>
     <link rel="stylesheet" href="amplib-ui.css" />
     <style>
-      /* Layout only — type, color and spacing are amplib-ui's. The index is a
-         .doc like the library's own docs page, so the two read as one system. */
+      /* Layout only — type, color and spacing are amplib-ui's. Same body rule
+         as /album, /make and /me so the h1 and every line beneath it start on
+         the same left edge across the site. */
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        width: 100%;
+      }
       .entry {
         display: flex;
         flex-direction: column;
@@ -36,61 +51,57 @@
       }
     </style>
   </head>
-  <body>
-    <header class="masthead">
-      <h1>Stegassette</h1>
-    </header>
+  <body data-theme="auto" data-density="compact">
+    <h1>Stegassette</h1>
 
-    <main class="doc">
-      <section>
+    <section>
+      <p class="ht-type-prose u-dim">
+        stegassette (steganographic cassette) encodes audio and text into images
+        reversibly, allowing the image to be decoded in real time. there are
+        many encoder patterns, preserving original image data and distorting it
+        to output a range of different visual effects. the encoding pattern
+        reversal can be visualized when played back.
+      </p>
+    </section>
+
+    <section>
+      <p class="ht-type-eyebrow">Tools</p>
+
+      <div class="entry">
+        <h2><a href="album/">album</a></h2>
+        <p class="ht-type-prose u-dim">build and play albums.</p>
+      </div>
+
+      <div class="entry">
+        <h2><a href="home/">home</a></h2>
+        <p class="ht-type-prose u-dim">offline library for your stegassettes</p>
+      </div>
+
+      <div class="entry">
+        <h2><a href="make/">make</a></h2>
+        <p class="ht-type-prose u-dim">make a stegassette</p>
+      </div>
+
+      <div class="entry">
+        <h2><a href="me/">me</a></h2>
+        <p class="ht-type-prose u-dim">stegassette selfies</p>
+      </div>
+    </section>
+
+    <section>
+      <p class="ht-type-eyebrow">Works</p>
+
+      <div class="entry">
+        <h2><a href="geese/">geese</a></h2>
+        <p class="ht-type-prose u-dim">artifacts of geese from the basement</p>
+      </div>
+
+      <div class="entry">
+        <h2><a href="live/">live</a></h2>
         <p class="ht-type-prose u-dim">
-          stegassette (steganographic cassette) encodes audio and text into
-          images reversibly, allowing the image to be decoded in real time.
-          there are many encoder patterns, preserving original image data and
-          distorting it to output a range of different visual effects. the
-          encoding pattern reversal can be visualized when played back.
+          an homage to performances that have made me feel alive.
         </p>
-      </section>
-
-      <section>
-        <p class="ht-type-eyebrow">Tools</p>
-
-        <div class="entry">
-          <h2><a href="album/">album</a></h2>
-          <p class="ht-type-prose u-dim">build and play albums.</p>
-        </div>
-
-        <div class="entry">
-          <h2><a href="home/">home</a></h2>
-          <p class="ht-type-prose u-dim">Offline library for your Stegassettes</p>
-        </div>
-
-        <div class="entry">
-          <h2><a href="make/">make</a></h2>
-          <p class="ht-type-prose u-dim">make a stegassette</p>
-        </div>
-
-        <div class="entry">
-          <h2><a href="me/">me</a></h2>
-          <p class="ht-type-prose u-dim">stegassette selfies</p>
-        </div>
-      </section>
-
-      <section>
-        <p class="ht-type-eyebrow">Works</p>
-
-        <div class="entry">
-          <h2><a href="geese/">geese</a></h2>
-          <p class="ht-type-prose u-dim">artifacts of geese from the basement</p>
-        </div>
-
-        <div class="entry">
-          <h2><a href="live/">live</a></h2>
-          <p class="ht-type-prose u-dim">
-            an homage to performances that have made me feel alive.
-          </p>
-        </div>
-      </section>
-    </main>
+      </div>
+    </section>
   </body>
 </html>
