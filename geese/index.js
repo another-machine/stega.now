@@ -14,10 +14,9 @@ document.querySelectorAll("section").forEach((section) => {
   const thumb = button?.querySelector("img:not(.media)");
 
   if (button && media && thumb) {
-    section.style.setProperty(
-      "--background",
-      `url(${thumb.getAttribute("src")})`
-    );
+    // thumb.src, not the attribute: a relative url() inside a custom
+    // property resolves against the stylesheet that uses it, not this page
+    section.style.setProperty("--gal-backdrop", `url(${thumb.src})`);
 
     let player = null;
     let building = false;
@@ -38,7 +37,7 @@ document.querySelectorAll("section").forEach((section) => {
           player.element.style.setProperty("--og-height", `${player.height}px`);
           player.element.style.aspectRatio = `${player.width} / ${player.height}`;
           button.appendChild(player.element);
-          thumb.classList.add("hidden");
+          thumb.classList.add("gal-ghost");
           thumb.setAttribute("aria-hidden", "true");
         } catch (err) {
           console.error("stegassette decode failed", err);
@@ -48,20 +47,21 @@ document.querySelectorAll("section").forEach((section) => {
         }
       }
 
-      // Stop playback in any other section
-      if (current && current !== player) {
-        current.stop();
-        current.element.classList.remove("active");
+      // Stop playback in any other room; playing state lives on the button
+      // as aria-pressed, and the gallery styles light the work from it
+      if (current && current.player !== player) {
+        current.player.stop();
+        current.button.setAttribute("aria-pressed", "false");
         current = null;
       }
 
       if (player.playing) {
         player.stop();
-        player.element.classList.remove("active");
+        button.setAttribute("aria-pressed", "false");
         current = null;
       } else {
-        player.element.classList.add("active");
-        current = player;
+        button.setAttribute("aria-pressed", "true");
+        current = { player, button };
         await player.play();
       }
     });

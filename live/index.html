@@ -28,245 +28,124 @@
       content="https://anothermachine.info/amplib.app.live.png"
     />
 
+    <link rel="stylesheet" href="../amplib-gallery.css" />
     <style>
+      /* Screen-specific pieces on top of amplib-gallery. This gallery hangs
+         one work at a time above a rail of the rest: the selected image sits
+         in a background slot that collapses when nothing is chosen, and the
+         body background (set from the selection) shows through every room's
+         veil. Values are tokens. */
       :root {
-        --start-dimension: 150px;
+        --gal-veil: blur(8px) brightness(20%);
       }
 
-      @media (min-width: 900px) {
-        body {
-          font-size: 1.8rem;
-        }
+      .room {
+        padding-inline: var(--gal-pad);
       }
 
-      @keyframes pulsing {
-        from {
-          opacity: 1;
-        }
-        to {
-          opacity: 0.3;
-        }
+      /* the background slot: the selected work, large; collapsed when empty */
+      .room > .background {
+        display: block;
+        height: calc(100% - var(--gal-thumb) - var(--gal-pad) * 3);
+        image-rendering: pixelated;
+        margin-top: var(--gal-pad);
+        max-height: calc(100% - var(--gal-thumb) - var(--gal-pad) * 3);
+        object-fit: contain;
+        object-position: center;
+        transition: opacity var(--gal-duration) ease-in;
+        width: 100%;
       }
-
-      html,
-      body {
-        background-color: black;
+      .room > .background.hidden {
+        margin-top: 0;
+        max-height: 0;
+      }
+      .room > div.background > canvas {
+        display: block;
         height: 100%;
-        margin: 0;
+        image-rendering: pixelated;
+        left: 50%;
+        max-width: 100%;
+        object-fit: contain;
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
       }
-      body {
-        background-position: center;
-        background-size: cover;
-        font-family: "Times New Roman", Times, serif;
-        letter-spacing: 0.07em;
-      }
-      main {
+
+      /* the rail fills the room until a work hangs; then it shrinks to a
+         strip and the unselected works fall back into deep dim */
+      .rail {
         height: 100%;
-        overflow-y: auto;
-        scroll-snap-type: y mandatory;
-        scrollbar-width: none;
       }
-      main::-webkit-scrollbar {
+      .rail .work > img {
+        filter: none;
+        transition: all var(--gal-duration) var(--gal-ease);
+      }
+      .rail .work img.media {
         display: none;
       }
-      section {
-        --inset: max(10vh, 10vw);
-        --padding: calc(var(--inset) * 0.1);
+      .background:not(.hidden) ~ .rail {
+        height: calc(var(--gal-thumb) + var(--gal-pad) * 2);
+      }
+      .background:not(.hidden) ~ .rail .work:not([aria-pressed="true"]) > img {
+        filter: var(--gal-dim-deep);
+      }
+      .background:not(.hidden)
+        ~ .rail
+        .work:not([aria-pressed="true"])
+        > img:hover {
+        filter: none;
+      }
+
+      /* placards run bigger here than the gallery default */
+      .placard {
         align-items: center;
-        backdrop-filter: blur(8px) brightness(20%);
-        box-sizing: border-box;
+        min-height: 100%;
+        height: initial;
+        padding: 4rem 0;
+      }
+      .placard h1 {
+        font-size: 4em;
+      }
+      .placard p {
+        font-size: 1.4em;
+      }
+      .placard p.body,
+      .placard p:last-child {
+        font-size: 1.1em;
+      }
+      .placard :is(h1, p) {
+        max-width: min(90%, 900px);
+      }
+      .placard ul {
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        height: 100%;
-        padding-left: var(--padding);
-        padding-right: var(--padding);
-        position: relative;
-        scroll-snap-align: start;
-
-        > a {
-          top: var(--padding);
-          color: white;
-          display: none;
-          font-size: 16px;
-          font-style: italic;
-          position: absolute;
-          right: var(--padding);
-          /* left: 50%;
-          transform: translateX(-50%); */
-          z-index: 999;
-          &.active {
-            display: block;
-          }
-        }
-
-        > .background {
-          display: block;
-          height: calc(100% - var(--start-dimension) - var(--padding) * 3);
-          image-rendering: pixelated;
-          margin-top: var(--padding);
-          max-height: calc(100% - var(--start-dimension) - var(--padding) * 3);
-          object-fit: contain;
-          object-position: center;
-          transition: opacity 250ms ease-in;
-          width: 100%;
-          z-index: 0;
-
-          &.hidden {
-            margin-top: 0;
-            max-height: 0;
-          }
-
-        &:not(.hidden) ~ nav {
-          height: calc(var(--start-dimension) + var(--padding) * 2);
-          > button {
-            &:not(.active) > img {
-              filter: brightness(30%);
-
-              &:hover {
-                filter: brightness(100%);
-              }
-            }
-          }
-        }
-        }
-
-        > div.background {
-          position: relative;
-
-          > canvas {
-            display: block;
-            height: 100%;
-            image-rendering: pixelated;
-            left: 50%;
-            max-width: 100%;
-            object-fit: contain;
-            position: absolute;
-            top: 0;
-            transform: translateX(-50%);
-          }
-        }
-
-        &.loading {
-          > .background {
-            animation: pulsing 1.4s ease-in-out alternate infinite;
-          }
-        }
-
-        > nav {
-          align-items: center;
-          box-sizing: border-box;
-          gap: var(--padding);
-          display: flex;
-          max-width: 100%;
-          overflow-x: auto;
-          padding: var(--padding);
-          scroll-snap-type: x mandatory;
-          scrollbar-width: none;
-          height: 100%;
-
-          &::-webkit-scrollbar {
-            display: none;
-          }
-
-          > button {
-            appearance: none;
-            background: 0;
-            border: 0;
-            cursor: crosshair;
-            display: flex;
-            height: auto;
-            align-items: center;
-            padding: 0;
-            position: relative;
-            scroll-snap-align: start;
-
-            > img {
-              height: auto;
-              transition: all 250ms ease-in-out;
-              width: var(--start-dimension);
-
-              &.media {
-                display: none;
-              }
-            }
-          }
-        }
-        &.info {
-          align-items: center;
-          background: black;
-          box-sizing: border-box;
-          color: white;
-          gap: 0.9em;
-          justify-content: center;
-          padding: 4rem 0;
-          min-height: 100%;
-          height: initial;
-          text-align: left;
-
-          h1 {
-            font-size: 4em;
-          }
-          h1,
-          p:not(.body) {
-            font-style: italic;
-          }
-          p a {
-            color: white;
-          }
-          p {
-            font-size: 1.4em;
-            line-height: 1.2;
-            &.body,
-            &:last-child {
-              font-size: 1.1em;
-            }
-          }
-          h1,
-          p {
-            max-width: min(90%, 900px);
-            text-wrap: balance;
-          }
-          h1,
-          p,
-          ul {
-            font-weight: 400;
-            margin: 0;
-            width: 100%;
-          }
-          ul {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            list-style: none;
-            margin: 0;
-            padding: 0;
-            max-width: min(90%, 700px);
-            text-wrap: pretty;
-            > li {
-              > a {
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                color: white;
-                font-size: 0.8em;
-                font-style: italic;
-                letter-spacing: 0.035em;
-                text-decoration: none;
-                > img {
-                  height: auto;
-                  width: 2.5em;
-                }
-              }
-            }
-          }
-        }
+        gap: 0.5rem;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-width: min(90%, 700px);
+        text-wrap: pretty;
+        width: 100%;
+      }
+      .placard ul > li > a {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--gal-ink);
+        font-size: 0.8em;
+        font-style: italic;
+        letter-spacing: 0.035em;
+        text-decoration: none;
+      }
+      .placard ul > li > a > img {
+        height: auto;
+        width: 2.5em;
       }
     </style>
   </head>
   <body>
-    <main>
-      <section class="info">
+    <main class="gallery">
+      <section class="room placard">
         <h1>live</h1>
         <p>an homage to performances that have made me feel&nbsp;alive.</p>
         <p class="body">
@@ -279,14 +158,14 @@
           <a href="https://anothermachine.info">another machine</a>.
         </p>
       </section>
-      <section>
+      <section class="room">
         <img
           src="media/thumbs/01-nina-simone.stegassette.jpg"
           class="background hidden"
         />
 
-        <nav>
-          <button>
+        <nav class="rail">
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/01-nina-simone.stegassette.jpg"
               alt="A dark square image with Nina Simone's silhouette leaning to the left, head low, the arch of her neck centered in the frame against a deep charcoal background. In the center, a square of iridescent holographic distortion covers roughly half the image, rendering the original warm tones as shifting silver, blue, and white with subtle rainbow interference patterns."
@@ -303,7 +182,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/02-mdou-moctar.stegassette.jpg"
               alt="A warm square photograph of Mdou Moctar playing an electric guitar in formal Saharan clothing, surrounded by people dancing outdoors in the dark under harsh directional lighting. A translucent ghost of the same scene is laid over itself, blending the warm oranges, browns, and earth tones into a diffuse dreamlike doubling across the full image."
@@ -320,7 +199,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/03-anohni.stegassette.jpg"
               alt="Medium-long shot high angle of Anohni Hegarty singing on stage. Blobs and splotches of white yellow magenta lime and blue distort the entire image."
@@ -337,7 +216,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/04-j-dilla.stegassette.jpg"
               alt="A lofi close-up of J Dilla holding a microphone to his mouth, looking left, wearing a ballcap in a live stage setting. The image is cast in a cool blue-gray wash; a large centered square of fine horizontal scanline noise covers most of the frame, only faintly distinguishable from the darker, smoother border surrounding it."
@@ -354,7 +233,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/05-ted-hawkins.stegassette.jpg"
               alt="A medium VHS-recorded shot of Ted Hawkins sitting on a makeshift stool on the Venice Beach boardwalk, longsleeve shirt, ballcap, acoustic guitar in hand. The cropped letters 'D HAWKI' — part of 'TED HAWKINS' — can be seen in tall hand-painted capitals on a guitar case on the right side of the image on the ground. The image is sunlit high contrast with a lot of white and green. In the center is a square covering half the image with intense red, blue, yellow, and green noise."
@@ -371,7 +250,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/06-rl-burnside.stegassette.jpg"
               alt="Medium shot of R.L. Burnside standing over a long log in a yard holding an axe, surrounded by grass and trees. The image is VHS-recorded with saturated greens. In the center a square covering roughly a third of the image renders his figure in muted sepia-olive dithered grain, darkening and desaturating the greens within it."
@@ -388,7 +267,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/07-mavis-staples.stegassette.jpg"
               alt="A close-up of Mavis Staples singing with her mouth open, eyes closed, hands raised open at shoulder height. The outer image is dark grayscale. A large deep indigo-blue square covers the center, with yellow-green coloration visible on her face and skin within it."
@@ -405,7 +284,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/08-janie-hunter.stegassette.jpg"
               alt="A close-up of Janie Hunter and other Moving Star Hall singers, shot on VHS. The image is washed in noisy violet-blue static — a central figure emerges in warm tan-orange grain, and a second figure at the right edge is rendered in contrasting lime-yellow. The heavy noise gives the scene a murky, submerged quality."
@@ -422,7 +301,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/09-cameron-winter.stegassette.jpg"
               alt="A medium shot of Cameron Winter playing an upright piano on a spotlit stage, facing to the left and away from the audience. He is wearing a white T-shirt, there are two directional microphones hovering above the piano like antennae, facing down. The back of the heads of many audience members are at the base of the image. A centered distortion square covering roughly half the frame renders the piano and stage within it in saturated red against the primarily dark blue and white image."
@@ -439,7 +318,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/10-sufjan-stevens.stegassette.jpg"
               alt="A heavily distorted image with Sufjan Stevens' face at the lower center, cap on, singing into a microphone, arms raised bearing angel wings. The photo is fractured and displaced into a radiating mandala-like pattern of torn fragments in blues, cyans, beiges, and oranges. A ghostlike inverted reflection of his head appears above him, and the wings create large mirrored shapes extending toward the corners."
@@ -456,7 +335,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/11-aretha-franklin.stegassette.jpg"
               alt="A medium shot of Aretha Franklin singing into a microphone at a church podium, wearing a light-colored outfit. Behind her, robed choir members fill the frame alongside other musicians; an American flag is visible in the upper right. A large centered square covering roughly half the image is filled with intense magenta and lime green distortion, inverting and oversaturating the original warm film tones where Aretha stands."
@@ -473,7 +352,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/12-paul-robeson.stegassette.jpg"
               alt="A black and white close-up of Paul Robeson's face with his mouth wide open in song, occupying the left half of the frame. The right half dissolves into abstract pale and dark smears where the grainy television image has been displaced, and a cluster of microphone silhouettes rises across the bottom of the frame."
@@ -490,7 +369,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/13-pete-seeger.stegassette.jpg"
               alt="A two-tone rendering — the background cast in deep indigo and cobalt blue while Pete Seeger and his banjo emerge in contrasting yellow-olive tones. He plays with his body angled back and the banjo's neck raised upward, audience members faintly visible behind him; the banjo's frets and tuning pegs are clearly legible."
@@ -507,7 +386,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/14-emahoy-tsege-mariam-gebru.stegassette.jpg"
               alt="An intimate image of an elderly woman seated at a grand piano, shown in profile facing right with her hands on the keys — rendered almost entirely in deep cobalt blue. Faint concentric squares radiate from a small black square at the exact center, the sheet music on the stand glows bright yellow, and scattered yellow-gold patches break through the blue around the keys and lower frame. A sliver of warm orange room detail survives along the right edge."
@@ -524,7 +403,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/15-jason-molina.stegassette.jpg"
               alt="A medium shot of Jason Molina seated at a microphone, head bowed downward, in a record store with shelves of records and posters visible in the background. A large orange-red rectangle covers the central two-thirds of the image in warm distortion, with two small isolated bright blocks, one pale blue and one yellow, like corrupted color artifacts against the orange wash."
@@ -541,7 +420,7 @@
             />
           </button>
 
-          <button>
+          <button class="work" aria-pressed="false">
             <img
               src="media/thumbs/16-burning-spear.stegassette.jpg"
               alt="A dim, low-contrast performance photograph showing several figures in a dark indoor setting. A centered deep violet-purple square covers the middle third of the image, rendering the figures within it as blue-purple shapes with faint lime-yellow highlights. To the left, a figure in light blue clothing is visible outside the distortion. The surrounding image is dark and muted with warm reddish ambient light."
@@ -559,7 +438,7 @@
           </button>
         </nav>
       </section>
-      <section class="info">
+      <section class="room placard">
         <ul>
           <li>
             <a href="https://www.youtube.com/watch?v=SzEDYoE7YQ4"

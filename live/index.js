@@ -23,8 +23,10 @@ document.querySelectorAll("nav button").forEach((button) => {
       section?.querySelector("img.background");
     if (!section || !media || !thumb) return;
 
-    const isActive = button.classList.contains("active");
-    section.querySelector("button.active")?.classList.remove("active");
+    const isActive = button.getAttribute("aria-pressed") === "true";
+    section
+      .querySelector('button[aria-pressed="true"]')
+      ?.setAttribute("aria-pressed", "false");
 
     document.body.style.backgroundImage = `url(${thumb.getAttribute("src")})`;
 
@@ -38,12 +40,12 @@ document.querySelectorAll("nav button").forEach((button) => {
       return;
     }
 
-    button.classList.add("active");
+    button.setAttribute("aria-pressed", "true");
 
     let player = players.get(button);
     if (!player) {
       building = true;
-      section.classList.add("loading");
+      section.toggleAttribute("data-loading", true);
       // Show the thumbnail pulsing in the background slot while decoding
       if (imgBackground) {
         imgBackground.src = thumb.currentSrc || thumb.src;
@@ -53,6 +55,18 @@ document.querySelectorAll("nav button").forEach((button) => {
         .querySelectorAll("div.background")
         .forEach((el) => el.remove());
       try {
+        // The full-resolution cartridge is display:none until it is wanted,
+        // and a lazy image with no box never intersects the viewport — so it
+        // would sit at complete:false forever and the decode would never
+        // start. Asking for it eagerly is what sets it going; the other
+        // cartridges stay deferred until they are chosen.
+        if (!media.complete) {
+          media.loading = "eager";
+          await new Promise((resolve, reject) => {
+            media.addEventListener("load", resolve, { once: true });
+            media.addEventListener("error", reject, { once: true });
+          });
+        }
         player = await Stegassette.createRevealPlayer({
           source: media,
           audioContext,
@@ -61,10 +75,13 @@ document.querySelectorAll("nav button").forEach((button) => {
         players.set(button, player);
       } catch (err) {
         console.error("stegassette decode failed", err);
+        // don't leave the tile claiming to play something that never loaded
+        button.setAttribute("aria-pressed", "false");
+        current = null;
         return;
       } finally {
         building = false;
-        section.classList.remove("loading");
+        section.toggleAttribute("data-loading", false);
       }
     }
 
