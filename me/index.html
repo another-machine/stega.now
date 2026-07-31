@@ -4,134 +4,101 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>me</title>
+    <link rel="stylesheet" href="../amplib-ui.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-      }
+      /* Screen-specific styling on top of amplib-ui. Type, controls,
+         fieldsets, tables, the drop target and the hidden state all come from
+         the system; what is left here is this screen's layout and the two
+         things that exist only here — the frame picker over the composed
+         picture, and the reveal. */
+
       body {
-        margin: 0;
-        padding: 10px;
-        font: 11px/1.45 monospace;
-        background: #fff;
-        color: #000;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-4);
       }
-      @media (prefers-color-scheme: dark) {
-        body {
-          background: #000;
-          color: #fff;
-        }
-      }
-      button,
-      input,
-      select,
-      textarea {
-        font: inherit;
-        color: inherit;
-        background: none;
-        border: 1px solid;
-      }
-      button {
-        cursor: pointer;
-      }
-      h1 {
-        font-size: 11px;
-        font-weight: normal;
-        margin: 0 0 8px;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
+      section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        width: 100%;
       }
       fieldset {
-        border: 1px solid;
-        margin: 0 0 8px;
-        padding: 6px 8px;
+        margin: 0;
+        width: 100%;
       }
-      legend {
-        padding: 0 4px;
+      /* the right-hand column carries the 300px stage, so the rail is a little
+         wider than the system's default — and the main column is held to a
+         width its controls read at rather than letting it take the viewport */
+      .ht-arrange-sidebar {
+        --ht-sidebar: 22rem;
+        width: 100%;
       }
-      .row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-items: center;
-        margin: 3px 0;
+      .ht-arrange-sidebar > :first-child {
+        max-inline-size: 34rem;
       }
-      .grid {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 3px 8px;
-        align-items: center;
-        max-width: 460px;
+      /* one field width across both columns, so the two runs of settings line
+         up as the same control */
+      .fieldset-stack {
+        --ht-field-label: 5.5rem;
+        max-inline-size: 22rem;
       }
-      .cols {
-        display: flex;
-        gap: 14px;
-        flex-wrap: wrap;
-        align-items: flex-start;
+      #aNormDb {
+        inline-size: 4.5rem;
       }
-      table {
-        border-collapse: collapse;
-        margin: 4px 0;
-      }
-      th,
-      td {
-        border: 1px solid;
-        padding: 2px 5px;
-        text-align: left;
-      }
-      th {
-        font-weight: normal;
-        opacity: 0.7;
-      }
-      .drop {
-        border: 1px dashed;
-        padding: 12px;
-        text-align: center;
-        margin: 0 0 8px;
-      }
-      .drop.over {
-        outline: 2px solid;
-      }
-      /* a utility, so it has to beat the element-qualified rules below */
-      .hide {
-        display: none !important;
-      }
-      .dim {
-        opacity: 0.6;
-      }
-      .warn {
-        opacity: 1;
-      }
+
       /* the camera, and the take being scrubbed */
       video.live {
-        display: block;
         width: 260px;
         max-width: 100%;
-        background: #7773;
       }
       video.mir {
         transform: scaleX(-1);
       }
-      /* the layout being composed: the picture with one button per frame
-         over it, blended so the numbers read against any matte */
+      #scrub,
+      #pSeek {
+        width: 15rem;
+        flex: none;
+      }
+
+      /* the layout being composed: the picture with one button per frame over
+         it, blended so the numbers read against any matte */
+      /* the frame buttons are positioned as a percentage of the stage, so it
+         has to shrink to the picture rather than stretch to its column */
       .stage {
         position: relative;
         display: inline-block;
+        align-self: flex-start;
         line-height: 0;
       }
+      /* the composed picture is subject matter, not a framed canvas, and its
+         natural size is what the frame buttons are positioned against */
       .stage canvas {
         display: block;
+        inline-size: auto;
+        block-size: auto;
+        max-inline-size: 100%;
+        border: 0;
+        background: none;
       }
       .slot {
         position: absolute;
         display: flex;
         align-items: center;
         justify-content: center;
+        min-block-size: 0;
+        padding: 0;
         border: 1px dashed #fff9;
         color: #fff;
         background: none;
         /* the picture underneath can be any colour, so the number carries its
            own contrast rather than relying on the matte */
-        text-shadow: 0 0 3px #000, 0 0 6px #000;
+        text-shadow:
+          0 0 3px #000,
+          0 0 6px #000;
         line-height: 1;
       }
       .slot.on {
@@ -141,13 +108,10 @@
         background: #0006;
       }
       #outImg {
-        display: block;
         max-width: 300px;
-        border: 1px solid;
+        border: var(--ht-hairline) solid var(--ht-line);
       }
-      meter {
-        width: 90px;
-      }
+
       /* the reveal: encoded on top, reconstruction underneath */
       .rev {
         position: relative;
@@ -158,6 +122,8 @@
         display: block;
         height: 42vh;
         width: auto;
+        border: 0;
+        background: none;
         image-rendering: pixelated;
       }
       .rev canvas + canvas {
@@ -165,241 +131,316 @@
         top: 0;
         left: 0;
       }
-      #pSeek {
-        width: 240px;
-      }
     </style>
   </head>
-  <body>
+  <body data-theme="auto" data-density="compact">
     <h1>me</h1>
-    <div class="row">
-      <button id="tabMake">make one</button>
-      <button id="tabPlay">play one</button>
-      <span class="dim"
+    <div class="ht-arrange-row">
+      <div class="tabs">
+        <button id="tabMake" aria-selected="true">make one</button>
+        <button id="tabPlay" aria-selected="false">play one</button>
+      </div>
+      <span class="ht-type-small"
         >a picture of you with your own voice hidden in its pixels</span
       >
     </div>
 
     <!-- ═══ MAKE ════════════════════════════════════════════ -->
     <section id="make">
-      <div class="cols">
-        <div>
+      <div class="ht-arrange-sidebar">
+        <div class="ht-arrange-stack">
           <fieldset>
             <legend>the picture</legend>
-            <div class="row">
-              <label
-                ><input type="radio" name="picsrc" value="camera" checked /> the
-                camera</label
-              >
-              <label
-                ><input type="radio" name="picsrc" value="images" /> images I
-                have</label
-              >
-            </div>
-
-            <div id="camBox">
-              <div class="row">
-                <button id="camStart">start the camera</button>
-                <button id="recStart" disabled>record</button>
-                <button id="recStop" class="hide">stop</button>
-                <label class="dim"
-                  ><input type="checkbox" id="mirror" checked /> mirror</label
+            <div class="ht-arrange-stack">
+              <div class="ht-arrange-row">
+                <label class="ht-arrange-inline"
+                  ><input type="radio" name="picsrc" value="camera" checked />
+                  the camera</label
                 >
-                <meter id="camLevel" min="0" max="1" value="0" class="hide"></meter>
-                <span id="camStatus" class="dim"></span>
+                <label class="ht-arrange-inline"
+                  ><input type="radio" name="picsrc" value="images" /> images I
+                  have</label
+                >
               </div>
-              <div class="row">
-                <video id="live" class="live hide" muted playsinline></video>
-                <div id="takeBox" class="hide">
-                  <video id="take" class="live" muted playsinline preload="auto"></video>
-                  <div class="row">
-                    <input id="scrub" type="range" min="0" max="1000" value="0" />
-                    <span id="scrubT" class="dim">0:00 / 0:00</span>
-                  </div>
-                  <div class="row">
-                    <button id="grab">grab into frame 1</button>
-                    <button id="spread">spread across every frame</button>
-                  </div>
-                </div>
-              </div>
-              <div class="dim">
-                record yourself, scrub to a moment you like, grab it into a
-                frame · or
-                <input type="file" id="vidFile" accept="video/*" hidden />
-                <button type="button" id="vidPick">use a video file</button>
-              </div>
-            </div>
 
-            <div id="imgBox" class="hide">
-              <div class="drop" id="imgDrop">
-                drop images here, or
-                <input type="file" id="imgFiles" accept="image/*" multiple hidden />
-                <button type="button" id="imgPick">choose images</button>
-                <div class="dim">
-                  they fill the frames in order, repeating if there are fewer
-                  images than frames
+              <div id="camBox" class="ht-arrange-stack">
+                <div class="ht-arrange-row">
+                  <button id="camStart">start the camera</button>
+                  <button id="recStart" disabled>record</button>
+                  <button id="recStop" hidden>stop</button>
+                  <label class="ht-arrange-inline u-dim"
+                    ><input type="checkbox" id="mirror" checked /> mirror</label
+                  >
+                  <progress
+                    id="camLevel"
+                    class="u-inline"
+                    max="1"
+                    value="0"
+                    hidden
+                  ></progress>
+                  <span id="camStatus" class="u-dim"></span>
+                </div>
+                <div class="ht-arrange-row">
+                  <video id="live" class="live" muted playsinline hidden></video>
+                  <div id="takeBox" class="ht-arrange-stack" hidden>
+                    <video
+                      id="take"
+                      class="live"
+                      muted
+                      playsinline
+                      preload="auto"
+                    ></video>
+                    <div class="ht-arrange-row">
+                      <input
+                        id="scrub"
+                        type="range"
+                        min="0"
+                        max="1000"
+                        value="0"
+                      />
+                      <span id="scrubT" class="u-dim">0:00 / 0:00</span>
+                    </div>
+                    <div class="ht-arrange-row">
+                      <button id="grab">grab into frame 1</button>
+                      <button id="spread">spread across every frame</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="ht-type-small">
+                  record yourself, scrub to a moment you like, grab it into a
+                  frame · or
+                  <input type="file" id="vidFile" accept="video/*" hidden />
+                  <button type="button" id="vidPick">use a video file</button>
                 </div>
               </div>
-              <div class="dim" id="imgStatus"></div>
+
+              <div id="imgBox" class="ht-arrange-stack" hidden>
+                <div class="drop" id="imgDrop">
+                  <span class="drop__label">drop images here</span>
+                  <span class="drop__sub"
+                    >they fill the frames in order, repeating if there are fewer
+                    images than frames</span
+                  >
+                  <input
+                    type="file"
+                    id="imgFiles"
+                    accept="image/*"
+                    multiple
+                    hidden
+                  />
+                  <button type="button" id="imgPick">choose images</button>
+                </div>
+                <div class="ht-type-small" id="imgStatus"></div>
+              </div>
             </div>
           </fieldset>
 
           <fieldset>
             <legend>the sound</legend>
-            <div class="row">
-              <label
-                ><input type="radio" name="sndsrc" value="video" checked /> the
-                video's own audio</label
-              >
-              <label
-                ><input type="radio" name="sndsrc" value="message" /> a message I
-                record</label
-              >
-            </div>
-            <div class="row">
-              <button id="msgStart">record a message</button>
-              <button id="msgStop" class="hide">stop</button>
-              <meter id="msgLevel" min="0" max="1" value="0" class="hide"></meter>
-              <span id="msgStatus" class="dim"></span>
-            </div>
-            <div class="row">
-              <audio id="sndPreview" controls class="hide"></audio>
-            </div>
-            <div class="grid">
-              <span>bit depth</span>
-              <select id="aBits" title="8 bit is grainier, and half the pixels">
-                <option>8</option>
-                <option selected>16</option>
-              </select>
-              <span>sample rate</span>
-              <select id="aRate"></select>
-              <span>channels</span>
-              <select id="aCh">
-                <option selected>1</option>
-                <option>2</option>
-              </select>
-              <span>layout</span>
-              <select id="aLayout" title="how the channels sit inside the image">
-                <option selected>planar</option>
-                <option>interleaved</option>
-              </select>
-              <span>normalize</span>
-              <label
-                ><input type="checkbox" id="aNorm" checked /> to
-                <input id="aNormDb" type="number" value="-1" step="0.5" size="4" />
-                dBFS</label
-              >
+            <div class="ht-arrange-stack">
+              <div class="ht-arrange-row">
+                <label class="ht-arrange-inline"
+                  ><input type="radio" name="sndsrc" value="video" checked /> the
+                  video's own audio</label
+                >
+                <label class="ht-arrange-inline"
+                  ><input type="radio" name="sndsrc" value="message" /> a message
+                  I record</label
+                >
+              </div>
+              <div class="ht-arrange-row">
+                <button id="msgStart">record a message</button>
+                <button id="msgStop" hidden>stop</button>
+                <progress
+                  id="msgLevel"
+                  class="u-inline"
+                  max="1"
+                  value="0"
+                  hidden
+                ></progress>
+                <span id="msgStatus" class="u-dim"></span>
+              </div>
+              <audio id="sndPreview" controls hidden></audio>
+              <div class="fieldset-stack">
+                <div class="field">
+                  <label for="aBits">bit depth</label>
+                  <select id="aBits" title="8 bit is grainier, and half the pixels">
+                    <option>8</option>
+                    <option selected>16</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="aRate">sample rate</label>
+                  <select id="aRate"></select>
+                </div>
+                <div class="field">
+                  <label for="aCh">channels</label>
+                  <select id="aCh">
+                    <option selected>1</option>
+                    <option>2</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="aLayout">layout</label>
+                  <select
+                    id="aLayout"
+                    title="how the channels sit inside the image"
+                  >
+                    <option selected>planar</option>
+                    <option>interleaved</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="aNorm">normalize</label>
+                  <label class="ht-arrange-inline"
+                    ><input type="checkbox" id="aNorm" checked /> to
+                    <input id="aNormDb" type="number" value="-1" step="0.5" />
+                    dBFS</label
+                  >
+                </div>
+              </div>
             </div>
           </fieldset>
         </div>
 
-        <div>
+        <div class="ht-arrange-stack">
           <fieldset>
             <legend>the layout</legend>
-            <div class="grid">
-              <span>template</span><select id="tpl"></select>
-              <span>aspect</span><select id="asp"></select>
-              <span>gap</span>
-              <input
-                id="gap"
-                type="number"
-                value="0"
-                min="0"
-                max="0.2"
-                step="0.005"
-                size="5"
-                title="fraction of the short side"
-              />
-              <span>matte</span><input id="matte" type="color" value="#000000" />
-              <span>least size</span>
-              <input
-                id="minLong"
-                type="number"
-                value="600"
-                min="80"
-                max="4000"
-                step="20"
-                size="6"
-                title="smallest long edge, in pixels — the sound may ask for more"
-              />
-            </div>
-            <div class="row">
+            <div class="ht-arrange-stack">
+              <div class="fieldset-stack">
+                <div class="field">
+                  <label for="tpl">template</label><select id="tpl"></select>
+                </div>
+                <div class="field">
+                  <label for="asp">aspect</label><select id="asp"></select>
+                </div>
+                <div class="field">
+                  <label for="gap">gap</label>
+                  <input
+                    id="gap"
+                    type="number"
+                    value="0"
+                    min="0"
+                    max="0.2"
+                    step="0.005"
+                    title="fraction of the short side"
+                  />
+                </div>
+                <div class="field">
+                  <label for="matte">matte</label>
+                  <input id="matte" type="color" value="#000000" />
+                </div>
+                <div class="field">
+                  <label for="minLong">least size</label>
+                  <input
+                    id="minLong"
+                    type="number"
+                    value="600"
+                    min="80"
+                    max="4000"
+                    step="20"
+                    title="smallest long edge, in pixels — the sound may ask for more"
+                  />
+                </div>
+              </div>
               <div class="stage" id="stage"></div>
-            </div>
-            <div class="dim" id="slotHint">
-              click a frame to aim the next grab at it
+              <div class="ht-type-small" id="slotHint">
+                click a frame to aim the next grab at it
+              </div>
             </div>
           </fieldset>
 
           <fieldset>
             <legend>the pattern</legend>
-            <div class="grid">
-              <span>combine</span><select id="sCombine"></select>
-              <span>traversal</span><select id="sTraversal"></select>
-              <span>keymap</span><select id="sKeymap"></select>
-              <span>packing</span><select id="sPack"></select>
-              <span>border</span>
-              <input
-                id="sBorder"
-                value="0.02"
-                size="6"
-                title="fraction of width, or whole px ≥ 1"
-              />
-            </div>
-            <div class="row">
-              <button id="sRandom">surprise me</button>
-              <span class="dim"
-                >combine decides how much the voice disturbs the picture ·
+            <div class="ht-arrange-stack">
+              <div class="fieldset-stack">
+                <div class="field">
+                  <label for="sCombine">combine</label
+                  ><select id="sCombine"></select>
+                </div>
+                <div class="field">
+                  <label for="sTraversal">traversal</label
+                  ><select id="sTraversal"></select>
+                </div>
+                <div class="field">
+                  <label for="sKeymap">keymap</label><select id="sKeymap"></select>
+                </div>
+                <div class="field">
+                  <label for="sPack">packing</label><select id="sPack"></select>
+                </div>
+                <div class="field">
+                  <label for="sBorder">border</label>
+                  <input
+                    id="sBorder"
+                    value="0.02"
+                    title="fraction of width, or whole px ≥ 1"
+                  />
+                </div>
+              </div>
+              <div class="ht-arrange-row">
+                <button id="sRandom">surprise me</button>
+              </div>
+              <div class="ht-type-small">
+                combine decides how much the voice disturbs the picture ·
                 traversal is the order it fills, and the order it develops in as
-                it plays</span
-              >
+                it plays
+              </div>
             </div>
           </fieldset>
 
           <fieldset>
             <legend>whose it is</legend>
-            <div class="grid">
-              <span>from</span><input id="nFrom" placeholder="me" />
-              <span>to</span><input id="nTo" />
-              <span>note</span><input id="nNote" size="30" />
+            <div class="fieldset-stack">
+              <div class="field">
+                <label for="nFrom">from</label
+                ><input id="nFrom" placeholder="me" />
+              </div>
+              <div class="field">
+                <label for="nTo">to</label><input id="nTo" />
+              </div>
+              <div class="field">
+                <label for="nNote">note</label><input id="nNote" />
+              </div>
             </div>
           </fieldset>
         </div>
       </div>
 
-      <div class="row">
+      <div class="ht-arrange-row">
         <button id="makeBtn" disabled>make the cartridge</button>
-        <progress id="mprog" value="0" max="1" class="hide"></progress>
-        <span id="mstatus" class="dim"></span>
+        <progress id="mprog" class="u-inline" value="0" max="1" hidden></progress>
+        <span id="mstatus" class="u-dim"></span>
       </div>
-      <div class="dim" id="est"></div>
-      <div id="mout"></div>
+      <div class="ht-type-small" id="est"></div>
+      <div id="mout" class="u-full"></div>
     </section>
 
     <!-- ═══ PLAY ════════════════════════════════════════════ -->
-    <section id="play" class="hide">
+    <section id="play" hidden>
       <div class="drop" id="pdrop">
-        drop a cartridge PNG here, or
+        <span class="drop__label">drop a cartridge PNG here</span>
+        <span class="drop__sub"
+          >any STGC cartridge with a PCM entry plays here — a stega-me one also
+          shows who it is from</span
+        >
         <input type="file" id="pfiles" accept="image/png" multiple hidden />
         <button type="button" id="ppick">choose files</button>
-        <div class="dim">
-          any STGC cartridge with a PCM entry plays here — a stega-me one also
-          shows who it is from
-        </div>
       </div>
-      <span id="pstatus" class="dim"></span>
-      <div id="pview" class="hide">
-        <div class="row">
+      <span id="pstatus" class="u-dim"></span>
+      <div id="pview" class="ht-arrange-stack" hidden>
+        <div class="ht-arrange-row">
           <button id="pplay">play</button>
           <input id="pSeek" type="range" min="0" max="1000" value="0" />
-          <span id="pTime" class="dim">0:00 / 0:00</span>
-          <label class="dim"><input type="checkbox" id="pLoop" /> loop</label>
+          <span id="pTime" class="u-dim">0:00 / 0:00</span>
+          <label class="ht-arrange-inline u-dim"
+            ><input type="checkbox" id="pLoop" /> loop</label
+          >
         </div>
-        <div class="cols">
+        <div class="ht-arrange-sidebar">
           <div id="pRev"></div>
-          <div>
+          <div class="ht-arrange-stack">
             <div id="pMeta"></div>
-            <div class="dim" id="pMethod"></div>
+            <div class="ht-type-small" id="pMethod"></div>
           </div>
         </div>
       </div>
@@ -415,8 +456,10 @@
         document.querySelector(`input[name="${name}"]:checked`).value;
 
       function setMode(m) {
-        $("make").classList.toggle("hide", m !== "make");
-        $("play").classList.toggle("hide", m !== "play");
+        $("make").hidden = m !== "make";
+        $("play").hidden = m !== "play";
+        $("tabMake").setAttribute("aria-selected", String(m === "make"));
+        $("tabPlay").setAttribute("aria-selected", String(m === "play"));
       }
       $("tabMake").addEventListener("click", () => setMode("make"));
       $("tabPlay").addEventListener("click", () => setMode("play"));
@@ -425,12 +468,12 @@
         for (const t of ["dragenter", "dragover"])
           el.addEventListener(t, (e) => {
             e.preventDefault();
-            el.classList.add("over");
+            el.dataset.state = "over";
           });
         for (const t of ["dragleave", "drop"])
           el.addEventListener(t, (e) => {
             e.preventDefault();
-            el.classList.remove("over");
+            delete el.dataset.state;
           });
         el.addEventListener("drop", (e) => {
           e.preventDefault();
@@ -586,8 +629,8 @@
       // ---- the camera ------------------------------------------
       function picMode() {
         const m = radio("picsrc");
-        $("camBox").classList.toggle("hide", m !== "camera");
-        $("imgBox").classList.toggle("hide", m !== "images");
+        $("camBox").hidden = m !== "camera";
+        $("imgBox").hidden = m !== "images";
       }
       for (const r of document.querySelectorAll('input[name="picsrc"]'))
         r.addEventListener("change", picMode);
@@ -602,8 +645,8 @@
           camStream = null;
           if (stopCamMeter) stopCamMeter();
           stopCamMeter = null;
-          $("live").classList.add("hide");
-          $("camLevel").classList.add("hide");
+          $("live").hidden = true;
+          $("camLevel").hidden = true;
           $("camStart").textContent = "start the camera";
           $("recStart").disabled = true;
           return;
@@ -616,13 +659,13 @@
         }
         const live = $("live");
         live.srcObject = camStream;
-        live.classList.remove("hide");
+        live.hidden = false;
         live.classList.toggle("mir", $("mirror").checked);
         await live.play().catch(() => {});
         $("camStart").textContent = "stop the camera";
         $("recStart").disabled = false;
         $("camStatus").textContent = "";
-        $("camLevel").classList.remove("hide");
+        $("camLevel").hidden = false;
         stopCamMeter = Me.meter(camStream, (v) => ($("camLevel").value = v));
       });
 
@@ -639,15 +682,15 @@
           $("camStatus").textContent =
             "recording " + Me.fmtTime((performance.now() - t0) / 1000);
         }, 200);
-        $("recStart").classList.add("hide");
-        $("recStop").classList.remove("hide");
+        $("recStart").hidden = true;
+        $("recStop").hidden = false;
       });
 
       $("recStop").addEventListener("click", async () => {
         if (!camRec) return;
         clearInterval(recTimer);
-        $("recStop").classList.add("hide");
-        $("recStart").classList.remove("hide");
+        $("recStop").hidden = true;
+        $("recStart").hidden = false;
         const t = await camRec.stop();
         camRec = null;
         await useTake(t.videoBlob, t.audioBlob, t.ms / 1000);
@@ -669,7 +712,7 @@
         const v = $("take");
         v.src = url;
         v.classList.toggle("mir", $("mirror").checked);
-        $("takeBox").classList.remove("hide");
+        $("takeBox").hidden = false;
         await new Promise((res) => {
           if (v.readyState >= 1) return res();
           v.addEventListener("loadedmetadata", res, { once: true });
@@ -764,10 +807,10 @@
         if (src) {
           sndUrl = URL.createObjectURL(src);
           el.src = sndUrl;
-          el.classList.remove("hide");
+          el.hidden = false;
         } else {
           el.removeAttribute("src");
-          el.classList.add("hide");
+          el.hidden = true;
         }
         drawStage();
       }
@@ -797,18 +840,18 @@
           $("msgStatus").textContent =
             "recording " + Me.fmtTime((performance.now() - t0) / 1000);
         }, 200);
-        $("msgLevel").classList.remove("hide");
+        $("msgLevel").hidden = false;
         stopMsgMeter = Me.meter(msgStream, (v) => ($("msgLevel").value = v));
-        $("msgStart").classList.add("hide");
-        $("msgStop").classList.remove("hide");
+        $("msgStart").hidden = true;
+        $("msgStop").hidden = false;
       });
 
       $("msgStop").addEventListener("click", async () => {
         if (!msgRec) return;
         clearInterval(recTimer);
-        $("msgStop").classList.add("hide");
-        $("msgStart").classList.remove("hide");
-        $("msgLevel").classList.add("hide");
+        $("msgStop").hidden = true;
+        $("msgStart").hidden = false;
+        $("msgLevel").hidden = true;
         const t = await msgRec.stop();
         msgRec = null;
         if (stopMsgMeter) stopMsgMeter();
@@ -879,7 +922,7 @@
           return;
         }
         $("makeBtn").disabled = true;
-        $("mprog").classList.remove("hide");
+        $("mprog").hidden = false;
         $("mout").innerHTML = "";
         try {
           const a = audioChoice();
@@ -920,9 +963,9 @@
           });
           const url = URL.createObjectURL(out.blob);
           $("mout").innerHTML =
-            `<div class="row"><img id="outImg" src="${url}" alt="the cartridge"></div>` +
-            `<div class="row"><a href="${url}" download="${out.name}">download ${out.name}</a>` +
-            `<span class="dim">${out.width}×${out.height} · ` +
+            `<div class="ht-arrange-row"><img id="outImg" src="${url}" alt="the cartridge"></div>` +
+            `<div class="ht-arrange-row"><a href="${url}" download="${out.name}">download ${out.name}</a>` +
+            `<span class="ht-type-small">${out.width}×${out.height} · ` +
             `${(out.blob.size / 1048576).toFixed(2)} MB · ` +
             `${out.info.steg.combine} / ${out.info.steg.traversal} / ${out.info.steg.keyMap}` +
             `${out.info.steg.pack !== "packed" ? " / " + out.info.steg.pack : ""} · ` +
@@ -936,7 +979,7 @@
         } catch (err) {
           $("mstatus").textContent = "✗ " + err.message;
         }
-        $("mprog").classList.add("hide");
+        $("mprog").hidden = true;
         $("makeBtn").disabled = false;
       });
 
@@ -1000,17 +1043,17 @@
                 .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
                 .join("") +
               `</table>`
-            : `<div class="dim">not a stega-me cartridge — playing its sound anyway</div>`;
+            : `<div class="ht-type-small">not a stega-me cartridge — playing its sound anyway</div>`;
           $("pMethod").textContent =
             `${c.opts.combine} / ${c.opts.traversal} / ${c.opts.keyMap}` +
             (c.opts.pack !== "packed" ? " / " + c.opts.pack : "") +
             ` · ${c.img.width}×${c.img.height}`;
-          $("pview").classList.remove("hide");
+          $("pview").hidden = false;
           $("pstatus").textContent = name || "";
           $("pTime").textContent = "0:00 / " + Me.fmtTime(pDur);
           $("pSeek").value = 0;
         } catch (err) {
-          $("pview").classList.add("hide");
+          $("pview").hidden = true;
           $("pstatus").textContent = "✗ " + err.message;
         }
       }
