@@ -7,8 +7,8 @@
 //   lib/stegassette.js        window.Stegassette      codec + reveal player
 //   lib/stegassette-jobs.js   window.StegassetteJobs  job schema (the editor)
 //
-// One copy for every page here — the player, /live, /geese, /me,
-// /audio-console and /make all load the same two files. The ESM builds are
+// One copy for every page here — /home (the player), /live, /geese, /me,
+// /album and /make all load the same two files. The ESM builds are
 // vendored by stegassette-jobs, which runs in Node.
 //
 // It replaces a hash comparison against a local lib/steg-core.js, which is gone

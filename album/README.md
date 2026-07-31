@@ -1,7 +1,7 @@
-# audio console
+# album
 
 Builds and plays **albums** made of stegassette STGC cartridges. Runs entirely
-in the browser — open `audio-console/` from the served repo, no build step.
+in the browser — open `album/` from the served repo, no build step.
 
 An album is a folder of PNGs:
 

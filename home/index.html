@@ -1,0 +1,1418 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>stegassette/home</title>
+    <link rel="stylesheet" href="../amplib-ui.css" />
+    <style>
+      /* Screen-specific pieces on top of amplib-ui. Values are tokens; the
+         local components here (cart tile, filmstrip, reveal) belong to this
+         screen alone. */
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* top bar while a cartridge is playing — a masthead that can hide */
+      #bar {
+        display: none;
+        align-items: center;
+      }
+      #bar.on {
+        display: flex;
+      }
+      #tabs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ht-space-2);
+      }
+
+      #stage {
+        flex: 1;
+        min-block-size: 0;
+        display: none;
+      }
+      #stage.on {
+        display: block;
+      }
+      #stage iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+      }
+      #stage .pane {
+        /* = ht-participation-scroll */
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--ht-line-strong) transparent;
+        padding: var(--ht-space-6);
+      }
+      #stage img {
+        max-width: 100%;
+        image-rendering: pixelated;
+        cursor: zoom-in;
+      }
+      #stage img.full {
+        max-width: none;
+        cursor: zoom-out;
+      }
+      #stage pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      /* transport progress is .u-inline; only its alignment is local */
+      #stage progress {
+        vertical-align: middle;
+      }
+
+      #lib {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
+      }
+
+      /* cart tile: a library entry. Buttons and plain tiles share the look,
+         so the base button styling is unwound where it fights the tile. */
+      .cart {
+        display: block;
+        min-block-size: 0;
+        padding: var(--ht-space-2);
+        border: var(--ht-hairline) solid var(--ht-line);
+        background-color: var(--ht-paper);
+        color: var(--ht-ink-dim);
+        font-size: var(--ht-text-small);
+        white-space: normal;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
+      }
+      .cart img {
+        display: block;
+        width: 72px;
+        image-rendering: pixelated;
+        margin: 0 auto var(--ht-space-2);
+        pointer-events: none;
+      }
+      .cart.sel {
+        outline: 2px solid var(--ht-ink);
+        outline-offset: var(--ht-hairline);
+      }
+      .cart .face {
+        display: block;
+        width: 100%;
+        min-block-size: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: var(--ht-text-small);
+        white-space: normal;
+        text-align: center;
+        cursor: pointer;
+      }
+      .cart .strip {
+        display: flex;
+        gap: 1px;
+        margin-bottom: var(--ht-space-2);
+        pointer-events: none;
+      }
+      .cart .strip img {
+        width: 34px;
+        margin: 0;
+      }
+
+      /* group order/rename panel */
+      #gedit {
+        border: var(--ht-hairline) solid var(--ht-line);
+        padding: var(--ht-space-3) var(--ht-space-4);
+      }
+      #gedit ol {
+        margin-block: var(--ht-space-2);
+        padding-inline-start: var(--ht-space-7);
+      }
+      #gedit img {
+        display: inline-block;
+        width: 24px;
+        vertical-align: middle;
+        margin-right: var(--ht-space-2);
+        image-rendering: pixelated;
+      }
+
+      /* filmstrip: the sounding part at full strength */
+      #film {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-1);
+        margin-block: var(--ht-space-3);
+      }
+      #film img {
+        display: block;
+        width: 44px;
+        image-rendering: pixelated;
+        opacity: 0.3;
+      }
+      #film img.now {
+        opacity: 1;
+      }
+
+      /* the reveal: encoded overlay above its developing reconstruction */
+      .rev {
+        position: relative;
+        display: inline-block;
+        margin-block: var(--ht-space-3);
+        line-height: 0;
+      }
+      .rev canvas {
+        display: block;
+        height: 44vh;
+        width: auto;
+        border: 0;
+        background: none;
+        image-rendering: pixelated;
+      }
+      .rev canvas + canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      .rev.big canvas {
+        height: 74vh;
+      }
+    </style>
+  </head>
+  <body data-theme="auto" data-density="compact">
+    <div id="bar" class="masthead">
+      <span id="cartname"></span>
+      <span id="tabs"></span>
+      <span class="u-grow"></span>
+      <button id="eject">eject</button>
+    </div>
+
+    <div id="stage"></div>
+
+    <div id="lib">
+      <div class="toolbar u-full">
+        <h1>Stegassette</h1>
+        <span class="u-grow"></span>
+        <a href="../me/">me</a>
+        <a href="../make/">make</a>
+        <a href="../album/">album</a>
+      </div>
+      <div id="grid" class="ht-arrange-row"></div>
+      <div id="gedit" hidden></div>
+      <div class="ht-arrange-row">
+        <button id="add">add</button>
+        <button id="select" hidden>select</button>
+        <button id="group" hidden>group</button>
+        <button id="delete" hidden>delete</button>
+        <button id="cancel" hidden>cancel</button>
+        <input
+          type="file"
+          id="file"
+          accept="image/png,image/*"
+          multiple
+          hidden
+        />
+      </div>
+      <p id="hint" class="ht-type-small" hidden>
+        select cartridges to group or delete them
+      </p>
+      <p id="err" class="status"></p>
+    </div>
+
+    <script src="../lib/stegassette.js"></script>
+    <script src="../lib/reveal.js"></script>
+    <script>
+      "use strict";
+      console.log("stegassette codec " + Stegassette.CODEC_VERSION);
+      /* ==========================================================
+         stega-now — playback for stegassette STGC cartridge PNGs.
+         Decodes in-browser via @amplib/steganography and plays back entries:
+           text/html → sandboxed full-viewport app
+           text/*    → text
+           image/*   → image
+           audio/L*  → raw STGC PCM via Web Audio
+           audio/*   → <audio> element
+           anything  → download link
+         Cartridges you add are kept as blobs in IndexedDB (disk-
+         scale quota — big images are fine); the active pointer and
+         per-cartridge app data stay in localStorage (small, and the
+         app-data seed must be read synchronously). When nothing is
+         playing, the library shows them. Click to play, hold to
+         delete. ?src=<url> fetches, stores, and plays a cartridge.
+
+         Cartridges can be grouped and ordered — a stegassette split
+         spreads one audio track across many images, and a group puts
+         those parts back in sequence. Playing a group whose parts all
+         carry audio concatenates their PCM into one buffer, so the
+         seams between images are inaudible.
+         ========================================================== */
+
+      const ACT = "stega-now:active"; // cart id, or "g:<groupId>"
+      const OLDLIB = "stega-now:lib"; // pre-IndexedDB base64 store, migrated on boot
+      const appKey = (id) => "stega-now:app:" + id;
+      const $ = (id) => document.getElementById(id);
+
+      let current = null; // single cartridge: { rec, entries, opts }
+      let currentGroup = null; // group playback: the group record
+      let selected = -1;
+      let selecting = false; // library selection mode
+      const picked = new Set(); // cart ids ticked while selecting
+      let editing = null; // group id whose order panel is open
+      let appFrame = null;
+      let stageReveal = null; // timed reveal on the stage, if any
+      let audioCtx = null,
+        audioSrc = null,
+        audioTimer = null;
+      const blobUrls = [];
+
+      // ---- cartridge + group store (IndexedDB) --------------------
+      let dbPromise = null;
+      function db() {
+        if (!dbPromise)
+          dbPromise = new Promise((res, rej) => {
+            const r = indexedDB.open("stega-now", 2);
+            r.onupgradeneeded = () => {
+              const d = r.result;
+              if (!d.objectStoreNames.contains("carts"))
+                d.createObjectStore("carts", { keyPath: "id" });
+              if (!d.objectStoreNames.contains("groups"))
+                d.createObjectStore("groups", { keyPath: "id" });
+            };
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          });
+        return dbPromise;
+      }
+      function store(name, mode, fn) {
+        return db().then(
+          (d) =>
+            new Promise((res, rej) => {
+              const t = d.transaction(name, mode);
+              const req = fn(t.objectStore(name));
+              t.oncomplete = () => res(req && req.result);
+              t.onerror = () => rej(t.error);
+              t.onabort = () => rej(t.error);
+            }),
+        );
+      }
+      const libAll = () => store("carts", "readonly", (s) => s.getAll());
+      const libPut = (rec) => store("carts", "readwrite", (s) => s.put(rec));
+      const libDel = (id) => store("carts", "readwrite", (s) => s.delete(id));
+      const grpAll = () => store("groups", "readonly", (s) => s.getAll());
+      const grpPut = (g) => store("groups", "readwrite", (s) => s.put(g));
+      const grpDel = (id) => store("groups", "readwrite", (s) => s.delete(id));
+
+      async function hashBytes(bytes) {
+        const h = await crypto.subtle.digest("SHA-256", bytes);
+        return Array.from(new Uint8Array(h), (b) =>
+          b.toString(16).padStart(2, "0"),
+        ).join("");
+      }
+
+      async function addToLib(name, bytes) {
+        const hash = await hashBytes(bytes);
+        const lib = await libAll();
+        const dup = lib.find((r) => r.hash === hash);
+        if (dup) return dup;
+        const rec = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name,
+          hash,
+          blob: new Blob([bytes], { type: "image/png" }),
+        };
+        try {
+          await libPut(rec);
+        } catch (_) {
+          alert("cartridge could not be saved — playing without saving");
+        }
+        return rec;
+      }
+      async function removeFromLib(id) {
+        try {
+          await libDel(id);
+        } catch (_) {}
+        const url = thumbUrls.get(id);
+        if (url) {
+          URL.revokeObjectURL(url);
+          thumbUrls.delete(id);
+        }
+        // drop it from any group it belonged to; empty groups go away
+        try {
+          for (const g of await grpAll()) {
+            if (!g.cartIds.includes(id)) continue;
+            const cartIds = g.cartIds.filter((c) => c !== id);
+            if (cartIds.length) await grpPut({ ...g, cartIds });
+            else await grpDel(g.id);
+          }
+        } catch (_) {}
+        try {
+          localStorage.removeItem(appKey(id));
+          if (localStorage.getItem(ACT) === id) localStorage.removeItem(ACT);
+        } catch (_) {}
+      }
+
+      // ---- groups -------------------------------------------------
+      // A group is an ordered list of cart ids: { id, name, cartIds }.
+      // Membership is exclusive — grouping a cart pulls it out of any
+      // group it was already in, so the library shows each cart once.
+
+      // Sort key from a cartridge name: prefer a split's "(3/12)",
+      // else the last number in the name ("15-step-03.png" → 3).
+      function orderKey(name) {
+        const s = String(name || "");
+        const frac = s.match(/\((\d+)\s*\/\s*\d+\)/);
+        if (frac) return parseInt(frac[1], 10);
+        const last = s.match(/(\d+)(?!.*\d)/);
+        return last ? parseInt(last[1], 10) : Infinity;
+      }
+      // Default group name: the shared prefix of its members, trimmed
+      // of the separators and digits that distinguish the parts.
+      function sharedName(names) {
+        if (!names.length) return "group";
+        let p = names[0];
+        for (const n of names.slice(1)) {
+          let i = 0;
+          while (i < p.length && i < n.length && p[i] === n[i]) i++;
+          p = p.slice(0, i);
+        }
+        p = p.replace(/[\s._\-–—(]*\d*$/, "").trim();
+        return p || names[0].replace(/\.[a-z0-9]+$/i, "") || "group";
+      }
+      async function createGroup(ids) {
+        const lib = await libAll();
+        const recs = ids
+          .map((id) => lib.find((r) => r.id === id))
+          .filter(Boolean);
+        recs.sort((a, b) => orderKey(a.name) - orderKey(b.name) || 0);
+        const name = prompt(
+          "group name",
+          sharedName(recs.map((r) => r.name)),
+        );
+        if (name === null) return null;
+        // exclusive membership: pull these carts out of existing groups
+        for (const g of await grpAll()) {
+          const cartIds = g.cartIds.filter((c) => !ids.includes(c));
+          if (cartIds.length === g.cartIds.length) continue;
+          if (cartIds.length) await grpPut({ ...g, cartIds });
+          else await grpDel(g.id);
+        }
+        const grp = {
+          id: "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name: name.trim() || sharedName(recs.map((r) => r.name)),
+          cartIds: recs.map((r) => r.id),
+        };
+        await grpPut(grp);
+        return grp;
+      }
+
+      // one-time migration of the old base64 localStorage library
+      function bytesFromB64(b64) {
+        const s = atob(b64);
+        const u8 = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+        return u8;
+      }
+      async function migrateOldLib() {
+        let old = null;
+        try {
+          old = JSON.parse(localStorage.getItem(OLDLIB));
+        } catch (_) {}
+        if (Array.isArray(old))
+          for (const r of old) {
+            try {
+              const bytes = bytesFromB64(r.b64);
+              await libPut({
+                id: r.id,
+                name: r.name,
+                hash: await hashBytes(bytes),
+                blob: new Blob([bytes], { type: "image/png" }),
+              });
+            } catch (_) {}
+          }
+        try {
+          localStorage.removeItem(OLDLIB);
+        } catch (_) {}
+      }
+
+      // ---- decode -------------------------------------------------
+      async function toImg(bytes) {
+        const blob = new Blob([bytes], { type: "image/png" });
+        let bmp;
+        try {
+          bmp = await createImageBitmap(blob, { colorSpaceConversion: "none" });
+        } catch (_) {
+          bmp = await createImageBitmap(blob);
+        }
+        const W = bmp.width,
+          H = bmp.height;
+        const cnv = Object.assign(document.createElement("canvas"), {
+          width: W,
+          height: H,
+        });
+        const ctx = cnv.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        const px = ctx.getImageData(0, 0, W, H).data;
+        return new Stegassette.Img(W, H, new Uint8Array(px));
+      }
+      async function decodeBytes(bytes) {
+        const img = await toImg(bytes);
+        // the Img is kept so playback can animate the decode (see buildReveal)
+        return { ...Stegassette.decodeContainer(img, img), img };
+      }
+      // Check a file really is a cartridge without paying for a full decode:
+      // the STGC header lives in the border alpha, so reading it costs
+      // nothing next to walking the whole interior. Throws if it isn't one.
+      async function checkCartridge(bytes) {
+        Stegassette.unpackStgcHeaderAlpha(await toImg(bytes));
+      }
+
+      function kindOf(mimetype) {
+        const m = (mimetype || "").toLowerCase();
+        if (m.startsWith("text/html")) return "html";
+        if (m.startsWith("audio/l")) return "pcm";
+        if (m.startsWith("audio/")) return "audio";
+        if (m.startsWith("image/")) return "image";
+        if (m.startsWith("text/") || m === "application/json") return "text";
+        return "file";
+      }
+
+      // ---- sandbox + storage bridge -------------------------------
+      // html entries run in a sandboxed iframe (opaque origin — no access
+      // to this site or other cartridges). The sandbox also blocks the
+      // cartridge's own localStorage, so a synchronous shim is injected,
+      // seeded from this cartridge's saved data; writes post back here and
+      // persist under "stega-now:app:<id>".
+      function shimHtml(html, seedObj) {
+        const seed = JSON.stringify(seedObj).replace(/</g, "\\u003c");
+        const shim =
+          "<script>(function(){" +
+          "var data=" +
+          seed +
+          ";" +
+          'function sync(){try{parent.postMessage({stegaNow:"store",data:data},"*")}catch(_){}}' +
+          "var shim={getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(data,k)?data[k]:null}," +
+          "setItem:function(k,v){data[String(k)]=String(v);sync()}," +
+          "removeItem:function(k){delete data[String(k)];sync()}," +
+          "clear:function(){data={};sync()}," +
+          "key:function(i){var ks=Object.keys(data);return i in ks?ks[i]:null}};" +
+          'Object.defineProperty(shim,"length",{get:function(){return Object.keys(data).length}});' +
+          "try{window.localStorage.getItem}catch(_){" +
+          'try{Object.defineProperty(window,"localStorage",{configurable:true,get:function(){return shim}})}catch(_){}}' +
+          "})()<\/scr" +
+          "ipt>";
+        // inject after <head>/<html>/doctype — a script before <!DOCTYPE>
+        // would flip the cartridge document into quirks mode
+        const m =
+          html.match(/<head[^>]*>/i) ||
+          html.match(/<html[^>]*>/i) ||
+          html.match(/<!doctype[^>]*>/i);
+        if (m) {
+          const at = m.index + m[0].length;
+          return html.slice(0, at) + shim + html.slice(at);
+        }
+        return shim + html;
+      }
+      window.addEventListener("message", (e) => {
+        if (
+          current &&
+          appFrame &&
+          e.source === appFrame &&
+          e.data &&
+          e.data.stegaNow === "store"
+        ) {
+          try {
+            localStorage.setItem(
+              appKey(current.rec.id),
+              JSON.stringify(e.data.data || {}),
+            );
+          } catch (_) {}
+        }
+      });
+      function readAppData(id) {
+        try {
+          return JSON.parse(localStorage.getItem(appKey(id))) || {};
+        } catch (_) {
+          return {};
+        }
+      }
+
+      // ---- playback -----------------------------------------------
+      function stopAudio() {
+        if (audioSrc) {
+          try {
+            audioSrc.stop();
+          } catch (_) {}
+          audioSrc = null;
+        }
+        if (audioTimer) {
+          clearInterval(audioTimer);
+          audioTimer = null;
+        }
+      }
+      function clearStage() {
+        stopAudio();
+        if (stageReveal && stageReveal.timer) clearInterval(stageReveal.timer);
+        stageReveal = null;
+        appFrame = null;
+        for (const u of blobUrls.splice(0)) URL.revokeObjectURL(u);
+        $("stage").innerHTML = "";
+      }
+
+      function fmtTime(s) {
+        s = Math.max(0, Math.round(s));
+        return ((s / 60) | 0) + ":" + String(s % 60).padStart(2, "0");
+      }
+
+      function buildPcmPlayer(e) {
+        const fmt = Stegassette.parseAudioMime(e.mimetype);
+        const f32 = Stegassette.toFloat32(e.data, fmt.bits);
+        const planar = Stegassette.unlayoutChannels({
+          f32,
+          layout: fmt.layout,
+          channels: fmt.channels,
+          blockSize: fmt.blockSize,
+        });
+        const N = (planar.length / fmt.channels) | 0;
+        const dur = N / fmt.rate;
+
+        const pane = document.createElement("div");
+        pane.className = "pane";
+        const btn = document.createElement("button");
+        btn.textContent = "play";
+        const prog = document.createElement("progress");
+        prog.className = "u-inline";
+        prog.max = 1;
+        prog.value = 0;
+        const tm = document.createElement("span");
+        tm.textContent = " 0:00 / " + fmtTime(dur);
+        const loopCb = document.createElement("input");
+        loopCb.type = "checkbox";
+        const loopLab = document.createElement("label");
+        loopLab.append(loopCb, " loop");
+        pane.append(
+          (e.name || "audio") +
+            " (" +
+            fmt.bits +
+            "-bit " +
+            fmt.rate +
+            " Hz × " +
+            fmt.channels +
+            "ch) ",
+          btn,
+          " ",
+          prog,
+          tm,
+          " ",
+          loopLab,
+        );
+        loopCb.addEventListener("change", () => {
+          if (audioSrc) audioSrc.loop = loopCb.checked;
+        });
+
+        // the image develops as its own audio is read back out of it
+        let rev = null;
+        if (current && current.img) {
+          rev = Reveal.build(current.img, current.opts, e);
+          pane.appendChild(rev.el);
+        }
+
+        let startedAt = 0,
+          playing = false;
+        btn.addEventListener("click", () => {
+          if (playing) {
+            stopAudio();
+            btn.textContent = "play";
+            playing = false;
+            return;
+          }
+          audioCtx =
+            audioCtx ||
+            new (window.AudioContext || window.webkitAudioContext)();
+          const buf = audioCtx.createBuffer(fmt.channels, N, fmt.rate);
+          for (let c = 0; c < fmt.channels; c++)
+            buf.getChannelData(c).set(planar.subarray(c * N, (c + 1) * N));
+          stopAudio();
+          audioSrc = audioCtx.createBufferSource();
+          audioSrc.buffer = buf;
+          audioSrc.loop = loopCb.checked;
+          audioSrc.connect(audioCtx.destination);
+          audioSrc.onended = () => {
+            btn.textContent = "play";
+            playing = false;
+            prog.value = 0;
+            clearInterval(audioTimer);
+          };
+          startedAt = audioCtx.currentTime;
+          audioSrc.start();
+          playing = true;
+          btn.textContent = "stop";
+          if (rev) rev.reset();
+          let lastT = 0;
+          audioTimer = setInterval(() => {
+            const raw = audioCtx.currentTime - startedAt;
+            const t =
+              audioSrc && audioSrc.loop ? raw % dur : Math.min(dur, raw);
+            prog.value = t / dur;
+            tm.textContent = " " + fmtTime(t) + " / " + fmtTime(dur);
+            if (rev) {
+              if (t < lastT) rev.reset(); // looped — develop it again
+              rev.seek(t / dur);
+            }
+            lastT = t;
+          }, 100);
+        });
+        return pane;
+      }
+
+      // ---- group playback -----------------------------------------
+      // Parts of a split are sample-exact slices of one source, so
+      // copying their PCM into a single AudioBuffer end to end plays
+      // the whole thing back with no seam at the image boundaries.
+      function buildGroupPlayer(grp, parts) {
+        const fmt = parts[0].fmt;
+        const total = parts.reduce((n, p) => n + p.N, 0);
+        const dur = total / fmt.rate;
+        const offs = [];
+        let acc = 0;
+        for (const p of parts) {
+          offs.push(acc);
+          acc += p.N;
+        }
+
+        const pane = document.createElement("div");
+        pane.className = "pane";
+        const btn = document.createElement("button");
+        btn.textContent = "play";
+        const prog = document.createElement("progress");
+        prog.className = "u-inline";
+        prog.max = 1;
+        prog.value = 0;
+        const tm = document.createElement("span");
+        tm.textContent = " 0:00 / " + fmtTime(dur);
+        const loopCb = document.createElement("input");
+        loopCb.type = "checkbox";
+        const loopLab = document.createElement("label");
+        loopLab.append(loopCb, " loop");
+        loopCb.addEventListener("change", () => {
+          if (audioSrc) audioSrc.loop = loopCb.checked;
+        });
+        const head = document.createElement("div");
+        head.textContent =
+          parts.length +
+          " parts · " +
+          fmt.bits +
+          "-bit " +
+          fmt.rate +
+          " Hz × " +
+          fmt.channels +
+          "ch · seamless ";
+        head.append(btn, " ", prog, tm, " ", loopLab);
+        pane.appendChild(head);
+
+        // filmstrip: every part's image, the sounding one at full opacity
+        const film = document.createElement("div");
+        film.id = "film";
+        const shots = parts.map((p) => {
+          const img = document.createElement("img");
+          const url = URL.createObjectURL(p.rec.blob);
+          blobUrls.push(url);
+          img.src = url;
+          img.alt = p.rec.name;
+          img.title = p.rec.name;
+          film.appendChild(img);
+          return img;
+        });
+        pane.appendChild(film);
+
+        // Each part's image develops while its own slice of audio plays.
+        // Only the sounding part (and the next, prefetched) is held in
+        // memory — twelve full-size decodes at once would be hundreds of MB.
+        const revBox = document.createElement("div");
+        pane.appendChild(revBox);
+        const revs = new Map();
+        let shown = -1,
+          loading = false;
+        async function ensureRev(i) {
+          if (i < 0 || i >= parts.length) return null;
+          if (revs.has(i)) return revs.get(i);
+          const bytes = new Uint8Array(await parts[i].rec.blob.arrayBuffer());
+          const dec = await decodeBytes(bytes);
+          const rev = Reveal.build(
+            dec.img,
+            dec.opts,
+            dec.entries.find((x) => kindOf(x.mimetype) === "pcm"),
+          );
+          revs.set(i, rev);
+          for (const k of [...revs.keys()])
+            if (k !== i && k !== shown && k !== shown + 1) revs.delete(k);
+          return rev;
+        }
+        function showRev(i) {
+          if (loading || i === shown) return;
+          loading = true;
+          ensureRev(i)
+            .then((rev) => {
+              loading = false;
+              if (!rev) return;
+              revBox.innerHTML = "";
+              revBox.appendChild(rev.el);
+              shown = i;
+              ensureRev(i + 1); // prefetch, so the next swap is instant
+            })
+            .catch(() => {
+              loading = false;
+            });
+        }
+
+        // shared text entries (a split repeats them in every part)
+        const seen = new Set();
+        for (const p of parts)
+          for (const e of p.entries) {
+            if (kindOf(e.mimetype) !== "text") continue;
+            const key = (e.name || "") + ":" + e.data.length;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const pre = document.createElement("pre");
+            pre.textContent = new TextDecoder().decode(e.data);
+            pane.appendChild(pre);
+          }
+
+        let buf = null;
+        function buffer() {
+          if (buf) return buf;
+          buf = audioCtx.createBuffer(fmt.channels, total, fmt.rate);
+          parts.forEach((p, i) => {
+            for (let c = 0; c < fmt.channels; c++)
+              buf
+                .getChannelData(c)
+                .set(p.planar.subarray(c * p.N, (c + 1) * p.N), offs[i]);
+            p.planar = null; // copied into the buffer; release the temporary
+          });
+          return buf;
+        }
+        function mark(t) {
+          const s = t * fmt.rate;
+          let cur = 0;
+          for (let i = 0; i < offs.length; i++) if (s >= offs[i]) cur = i;
+          shots.forEach((img, i) => img.classList.toggle("now", i === cur));
+          showRev(cur);
+          const rev = revs.get(cur);
+          if (rev && shown === cur) rev.seek((s - offs[cur]) / parts[cur].N);
+        }
+
+        let startedAt = 0,
+          playing = false;
+        btn.addEventListener("click", () => {
+          if (playing) {
+            stopAudio();
+            btn.textContent = "play";
+            playing = false;
+            return;
+          }
+          audioCtx =
+            audioCtx ||
+            new (window.AudioContext || window.webkitAudioContext)();
+          const b = buffer();
+          stopAudio();
+          audioSrc = audioCtx.createBufferSource();
+          audioSrc.buffer = b;
+          audioSrc.loop = loopCb.checked;
+          audioSrc.connect(audioCtx.destination);
+          audioSrc.onended = () => {
+            btn.textContent = "play";
+            playing = false;
+            prog.value = 0;
+            clearInterval(audioTimer);
+          };
+          startedAt = audioCtx.currentTime;
+          audioSrc.start();
+          playing = true;
+          btn.textContent = "stop";
+          let lastT = 0;
+          audioTimer = setInterval(() => {
+            const raw = audioCtx.currentTime - startedAt;
+            const t =
+              audioSrc && audioSrc.loop ? raw % dur : Math.min(dur, raw);
+            prog.value = t / dur;
+            tm.textContent = " " + fmtTime(t) + " / " + fmtTime(dur);
+            if (t < lastT) for (const r of revs.values()) r.reset(); // looped
+            lastT = t;
+            mark(t);
+          }, 100);
+        });
+        mark(0);
+        return pane;
+      }
+
+      // fallback view when a group can't play as one stream
+      function buildGroupList(parts, note) {
+        const pane = document.createElement("div");
+        pane.className = "pane";
+        const p = document.createElement("div");
+        p.textContent = note + " — play parts individually:";
+        pane.appendChild(p);
+        for (const part of parts) {
+          const b = document.createElement("button");
+          b.textContent = part.rec.name;
+          b.addEventListener("click", () => play(part.rec));
+          pane.append(b, " ");
+        }
+        return pane;
+      }
+
+      async function playGroup(grp) {
+        const lib = await libAll();
+        const recs = grp.cartIds
+          .map((id) => lib.find((r) => r.id === id))
+          .filter(Boolean);
+        if (!recs.length) {
+          $("err").textContent = "✗ " + grp.name + ": no cartridges left";
+          removeActive();
+          return false;
+        }
+        clearStage();
+        current = null;
+        currentGroup = grp;
+        selected = -1;
+        try {
+          localStorage.setItem(ACT, "g:" + grp.id);
+        } catch (_) {}
+        $("lib").hidden = true;
+        $("bar").classList.add("on");
+        $("stage").classList.add("on");
+        $("tabs").innerHTML = "";
+        $("cartname").textContent = grp.name;
+
+        const stage = $("stage");
+        const load = document.createElement("div");
+        load.className = "pane";
+        stage.appendChild(load);
+
+        const parts = [];
+        for (let i = 0; i < recs.length; i++) {
+          load.textContent = "decoding " + (i + 1) + "/" + recs.length + "…";
+          await new Promise((r) => setTimeout(r, 0)); // let the status paint
+          try {
+            const bytes = new Uint8Array(await recs[i].blob.arrayBuffer());
+            const dec = await decodeBytes(bytes);
+            parts.push({ rec: recs[i], entries: dec.entries });
+          } catch (err) {
+            load.remove();
+            stage.appendChild(
+              buildGroupList(
+                recs.map((r) => ({ rec: r })),
+                "✗ " + recs[i].name + ": " + err.message,
+              ),
+            );
+            return true;
+          }
+        }
+
+        // gapless needs raw PCM in every part, at one common format
+        const audio = parts.map((p) =>
+          p.entries.find((e) => kindOf(e.mimetype) === "pcm"),
+        );
+        let note = null;
+        if (!audio.every(Boolean)) note = "not every part carries PCM audio";
+        else {
+          const f = audio.map((e) => Stegassette.parseAudioMime(e.mimetype));
+          if (
+            !f.every((x) => x.rate === f[0].rate && x.channels === f[0].channels)
+          )
+            note = "parts differ in sample rate or channel count";
+          else
+            parts.forEach((p, i) => {
+              p.fmt = f[i];
+              p.planar = Stegassette.unlayoutChannels({
+                f32: Stegassette.toFloat32(audio[i].data, f[i].bits),
+                layout: f[i].layout,
+                channels: f[i].channels,
+                blockSize: f[i].blockSize,
+              });
+              p.N = (p.planar.length / f[i].channels) | 0;
+            });
+        }
+
+        load.remove();
+        stage.appendChild(
+          note ? buildGroupList(parts, note) : buildGroupPlayer(grp, parts),
+        );
+        return true;
+      }
+
+      function showEntry(i) {
+        const e = current.entries[i];
+        if (!e) return;
+        selected = i;
+        clearStage();
+        const stage = $("stage");
+        const kind = kindOf(e.mimetype);
+
+        if (kind === "html") {
+          const iframe = document.createElement("iframe");
+          iframe.setAttribute(
+            "sandbox",
+            "allow-scripts allow-forms allow-modals allow-downloads",
+          );
+          iframe.allow = "fullscreen";
+          iframe.srcdoc = shimHtml(
+            new TextDecoder().decode(e.data),
+            readAppData(current.rec.id),
+          );
+          stage.appendChild(iframe);
+          appFrame = iframe.contentWindow;
+        } else if (kind === "text") {
+          const pane = document.createElement("div");
+          pane.className = "pane";
+          const pre = document.createElement("pre");
+          pre.textContent = new TextDecoder().decode(e.data);
+          pane.appendChild(pre);
+          stage.appendChild(pane);
+        } else if (kind === "image") {
+          const pane = document.createElement("div");
+          pane.className = "pane";
+          const img = document.createElement("img");
+          const url = URL.createObjectURL(
+            new Blob([e.data], { type: e.mimetype }),
+          );
+          blobUrls.push(url);
+          img.src = url;
+          img.alt = e.name || "image entry";
+          img.title = "click to toggle 100% size";
+          img.addEventListener("click", () => img.classList.toggle("full"));
+          pane.appendChild(img);
+          stage.appendChild(pane);
+        } else if (kind === "audio") {
+          const pane = document.createElement("div");
+          pane.className = "pane";
+          const au = document.createElement("audio");
+          au.controls = true;
+          const url = URL.createObjectURL(
+            new Blob([e.data], { type: e.mimetype }),
+          );
+          blobUrls.push(url);
+          au.src = url;
+          const loopCb = document.createElement("input");
+          loopCb.type = "checkbox";
+          loopCb.addEventListener("change", () => (au.loop = loopCb.checked));
+          const loopLab = document.createElement("label");
+          loopLab.append(loopCb, " loop");
+          pane.append(au, " ", loopLab);
+          stage.appendChild(pane);
+        } else if (kind === "pcm") {
+          stage.appendChild(buildPcmPlayer(e));
+        } else {
+          const pane = document.createElement("div");
+          pane.className = "pane";
+          const a = document.createElement("a");
+          const url = URL.createObjectURL(
+            new Blob([e.data], {
+              type: e.mimetype || "application/octet-stream",
+            }),
+          );
+          blobUrls.push(url);
+          a.href = url;
+          a.download = e.name || "entry.bin";
+          a.textContent = "download " + (e.name || "entry");
+          pane.appendChild(a);
+          stage.appendChild(pane);
+        }
+        renderTabs();
+      }
+
+      // The reveal as a view of its own: the whole image develops on a
+      // timer rather than a playhead, and can be replayed. Passing every
+      // entry keeps the sweep byte-ordered but channel-aware — a stereo
+      // track's two halves develop together, as they do during playback.
+      const REVEAL_MS = 2200;
+      function showReveal() {
+        if (!current || !current.img) return;
+        selected = -2;
+        clearStage();
+        const pane = document.createElement("div");
+        pane.className = "pane";
+        const rev = Reveal.build(current.img, current.opts, current.entries || null);
+        stageReveal = rev;
+        rev.el.classList.add("big");
+        const replay = document.createElement("button");
+        replay.textContent = "replay";
+        replay.addEventListener("click", () => Reveal.animate(rev, REVEAL_MS));
+        pane.append(replay, rev.el);
+        $("stage").appendChild(pane);
+        Reveal.animate(rev, REVEAL_MS);
+        renderTabs();
+      }
+
+      function renderTabs() {
+        const tabs = $("tabs");
+        tabs.innerHTML = "";
+        if (!current) return;
+        // entry buttons when there's a choice — always while the reveal
+        // is up, so a single-entry cartridge can get back to its entry
+        if (current.entries.length > 1 || selected === -2)
+          current.entries.forEach((e, i) => {
+            const b = document.createElement("button");
+            b.textContent = e.name || kindOf(e.mimetype) + " " + i;
+            b.disabled = i === selected;
+            // polarity marks the current entry; disabled alone reads as
+            // "unavailable" in amplib-ui
+            b.setAttribute("aria-pressed", i === selected);
+            b.addEventListener("click", () => showEntry(i));
+            tabs.appendChild(b);
+          });
+        if (current.img) {
+          const b = document.createElement("button");
+          b.textContent = "reveal";
+          b.disabled = selected === -2;
+          b.setAttribute("aria-pressed", selected === -2);
+          b.addEventListener("click", showReveal);
+          tabs.appendChild(b);
+        }
+      }
+
+      async function play(rec) {
+        let dec;
+        try {
+          dec = await decodeBytes(new Uint8Array(await rec.blob.arrayBuffer()));
+        } catch (err) {
+          $("err").textContent = "✗ " + rec.name + ": " + err.message;
+          removeActive();
+          return false;
+        }
+        current = {
+          rec,
+          entries: dec.entries,
+          opts: dec.opts,
+          img: dec.img, // kept for the reveal animation
+        };
+        currentGroup = null;
+        try {
+          localStorage.setItem(ACT, rec.id);
+        } catch (_) {}
+        $("lib").hidden = true;
+        $("bar").classList.add("on");
+        $("stage").classList.add("on");
+        $("cartname").textContent = rec.name;
+        const first = dec.entries.findIndex(
+          (e) => kindOf(e.mimetype) === "html",
+        );
+        const hasAudio = dec.entries.some((e) =>
+          ["pcm", "audio"].includes(kindOf(e.mimetype)),
+        );
+        // data-only cartridges open on the reveal — there's no playhead to
+        // drive it, so it runs fast and can be replayed. Apps still boot
+        // straight in; their reveal is a click away in the bar.
+        if (first < 0 && !hasAudio) showReveal();
+        else showEntry(first >= 0 ? first : 0);
+        return true;
+      }
+
+      function removeActive() {
+        try {
+          localStorage.removeItem(ACT);
+        } catch (_) {}
+      }
+
+      function eject() {
+        clearStage();
+        current = null;
+        currentGroup = null;
+        selected = -1;
+        removeActive();
+        $("bar").classList.remove("on");
+        $("stage").classList.remove("on");
+        $("lib").hidden = false;
+        renderGrid();
+      }
+
+      // ---- library ------------------------------------------------
+      // One object URL per cartridge, kept for as long as the cartridge
+      // exists. Minting fresh ones per render made every thumbnail decode
+      // again, so the library blinked on each re-render.
+      const thumbUrls = new Map();
+      function thumbOf(rec) {
+        let url = thumbUrls.get(rec.id);
+        if (!url) {
+          url = URL.createObjectURL(rec.blob);
+          thumbUrls.set(rec.id, url);
+        }
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = rec.name;
+        return img;
+      }
+      function updateSelButtons() {
+        $("group").textContent =
+          "group" + (picked.size ? " (" + picked.size + ")" : "");
+        $("group").disabled = picked.size < 2;
+        $("delete").textContent =
+          "delete" + (picked.size ? " (" + picked.size + ")" : "");
+        $("delete").disabled = !picked.size;
+      }
+
+      async function renderGrid() {
+        const grid = $("grid");
+        grid.innerHTML = "";
+        const [lib, groups] = await Promise.all([libAll(), grpAll()]);
+        const byId = new Map(lib.map((r) => [r.id, r]));
+        const grouped = new Set(groups.flatMap((g) => g.cartIds));
+
+        $("hint").hidden = !lib.length || selecting;
+        $("select").hidden = !(lib.length - grouped.size);
+        $("select").textContent = selecting ? "done" : "select";
+        $("group").hidden = !selecting;
+        $("delete").hidden = !selecting;
+        $("cancel").hidden = !selecting;
+        updateSelButtons();
+
+        // groups first — each previews its members in order
+        for (const g of groups) {
+          const recs = g.cartIds.map((id) => byId.get(id)).filter(Boolean);
+          if (!recs.length) continue;
+          const tile = document.createElement("div");
+          tile.className = "cart";
+          const face = document.createElement("button");
+          face.className = "face";
+          const strip = document.createElement("div");
+          strip.className = "strip";
+          for (const rec of recs.slice(0, 5)) strip.appendChild(thumbOf(rec));
+          face.appendChild(strip);
+          face.appendChild(
+            document.createTextNode(g.name + " · " + recs.length + " parts"),
+          );
+          face.addEventListener("click", () => {
+            if (selecting) return;
+            $("err").textContent = "";
+            playGroup(g);
+          });
+          const ed = document.createElement("button");
+          ed.textContent = "edit";
+          ed.addEventListener("click", () => {
+            editing = editing === g.id ? null : g.id;
+            renderGrid();
+          });
+          tile.append(face, ed);
+          grid.appendChild(tile);
+        }
+
+        // then loose cartridges (a grouped one shows inside its group)
+        for (const rec of lib) {
+          if (grouped.has(rec.id)) continue;
+          const b = document.createElement("button");
+          b.className = "cart" + (picked.has(rec.id) ? " sel" : "");
+          const label = document.createElement("span");
+          label.textContent = (picked.has(rec.id) ? "✓ " : "") + rec.name;
+          b.append(thumbOf(rec), label);
+          b.addEventListener("click", () => {
+            $("err").textContent = "";
+            if (!selecting) return play(rec);
+            // tick this tile in place — re-rendering the whole grid per
+            // click is what made the thumbnails flicker
+            const on = picked.has(rec.id);
+            on ? picked.delete(rec.id) : picked.add(rec.id);
+            b.classList.toggle("sel", !on);
+            label.textContent = (on ? "" : "✓ ") + rec.name;
+            updateSelButtons();
+          });
+          grid.appendChild(b);
+        }
+
+        renderEdit(byId, groups);
+      }
+
+      // order / rename / ungroup panel for one group
+      function renderEdit(byId, groups) {
+        const box = $("gedit");
+        box.innerHTML = "";
+        const g = editing ? groups.find((x) => x.id === editing) : null;
+        box.hidden = !g;
+        if (!g) return;
+
+        const save = async (patch) => {
+          await grpPut({ ...g, ...patch });
+          renderGrid();
+        };
+        const nameIn = document.createElement("input");
+        nameIn.type = "text"; // amplib-ui styles typed text inputs only
+        nameIn.value = g.name;
+        nameIn.addEventListener("change", () =>
+          save({ name: nameIn.value.trim() || g.name }),
+        );
+        const playB = document.createElement("button");
+        playB.textContent = "play";
+        playB.addEventListener("click", () => playGroup(g));
+        const ungroupB = document.createElement("button");
+        ungroupB.textContent = "ungroup";
+        ungroupB.addEventListener("click", () => {
+          if (!confirm("ungroup " + g.name + "? (cartridges stay)")) return;
+          grpDel(g.id).then(() => {
+            editing = null;
+            renderGrid();
+          });
+        });
+        const closeB = document.createElement("button");
+        closeB.textContent = "close";
+        closeB.addEventListener("click", () => {
+          editing = null;
+          renderGrid();
+        });
+        const head = document.createElement("div");
+        head.append("name ", nameIn, " ", playB, " ", ungroupB, " ", closeB);
+        box.appendChild(head);
+
+        const move = (i, d) => {
+          const ids = g.cartIds.slice();
+          if (i + d < 0 || i + d >= ids.length) return;
+          [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+          save({ cartIds: ids });
+        };
+        const ol = document.createElement("ol");
+        g.cartIds.forEach((id, i) => {
+          const rec = byId.get(id);
+          if (!rec) return;
+          const li = document.createElement("li");
+          li.appendChild(thumbOf(rec));
+          li.appendChild(document.createTextNode(rec.name + " "));
+          const up = document.createElement("button");
+          up.textContent = "↑";
+          up.disabled = i === 0;
+          up.addEventListener("click", () => move(i, -1));
+          const dn = document.createElement("button");
+          dn.textContent = "↓";
+          dn.disabled = i === g.cartIds.length - 1;
+          dn.addEventListener("click", () => move(i, 1));
+          const rm = document.createElement("button");
+          rm.textContent = "remove";
+          rm.addEventListener("click", () => {
+            const ids = g.cartIds.filter((c) => c !== id);
+            if (ids.length)
+              save({ cartIds: ids });
+            else
+              grpDel(g.id).then(() => {
+                editing = null;
+                renderGrid();
+              });
+          });
+          li.append(up, " ", dn, " ", rm);
+          ol.appendChild(li);
+        });
+        box.appendChild(ol);
+      }
+
+      // ---- wiring -------------------------------------------------
+      $("eject").addEventListener("click", eject);
+      $("add").addEventListener("click", () => $("file").click());
+      $("select").addEventListener("click", () => {
+        selecting = !selecting;
+        picked.clear();
+        renderGrid();
+      });
+      $("cancel").addEventListener("click", () => {
+        selecting = false;
+        picked.clear();
+        renderGrid();
+      });
+      $("group").addEventListener("click", async () => {
+        const grp = await createGroup([...picked]);
+        selecting = false;
+        picked.clear();
+        if (grp) editing = grp.id; // open the order panel on the new group
+        renderGrid();
+      });
+      $("delete").addEventListener("click", async () => {
+        if (!picked.size) return;
+        const n = picked.size;
+        if (!confirm("delete " + n + " cartridge" + (n === 1 ? "" : "s") + "?"))
+          return;
+        for (const id of [...picked]) await removeFromLib(id);
+        selecting = false;
+        picked.clear();
+        renderGrid();
+      });
+      $("file").addEventListener("change", async (e) => {
+        const files = [...e.target.files];
+        e.target.value = "";
+        if (!files.length) return;
+        // name order, counting numerically, so the parts of a split land in
+        // sequence however the file picker handed them over
+        files.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true }),
+        );
+        const added = [],
+          failed = [];
+        for (const f of files) {
+          if (files.length > 1) {
+            $("err").textContent =
+              "adding " + (added.length + failed.length + 1) + "/" + files.length + "…";
+            await new Promise((r) => setTimeout(r, 0)); // let the count paint
+          }
+          try {
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            await checkCartridge(bytes); // reject non-cartridges before storing
+            added.push(await addToLib(f.name, bytes));
+          } catch (err) {
+            failed.push(f.name + ": " + err.message);
+          }
+        }
+        $("err").textContent = failed.length ? "✗ " + failed.join("; ") : "";
+        // one cartridge plays straight away; a batch stays in the library,
+        // ready to be grouped
+        if (added.length === 1 && !failed.length) play(added[0]);
+        else renderGrid();
+      });
+
+      // ---- startup ------------------------------------------------
+      (async () => {
+        try {
+          if (navigator.storage && navigator.storage.persist)
+            navigator.storage.persist(); // ask not to evict under disk pressure
+        } catch (_) {}
+        await migrateOldLib();
+        const qs = new URLSearchParams(location.search);
+        const src = qs.get("src");
+        if (src) {
+          try {
+            const r = await fetch(src);
+            if (!r.ok) throw new Error("fetch failed: " + r.status);
+            const bytes = new Uint8Array(await r.arrayBuffer());
+            await decodeBytes(bytes);
+            const rec = await addToLib(
+              src.split("/").pop() || "cartridge.png",
+              bytes,
+            );
+            if (await play(rec)) return;
+          } catch (err) {
+            $("err").textContent = "✗ " + err.message;
+          }
+        }
+        const act = localStorage.getItem(ACT);
+        if (act && act.startsWith("g:")) {
+          const grp = (await grpAll()).find((g) => g.id === act.slice(2));
+          if (grp && (await playGroup(grp))) return;
+        } else if (act) {
+          const rec = (await libAll()).find((r) => r.id === act);
+          if (rec && (await play(rec))) return;
+        }
+        renderGrid();
+      })();
+    </script>
+  </body>
+</html>

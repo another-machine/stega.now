@@ -1,7 +1,12 @@
 # stega-now
 
-Playback for stegassette STGC cartridge PNGs. Static — `index.html` +
+Playback for stegassette STGC cartridge PNGs. Static — `home/index.html` +
 `lib/stegassette.js`, serve anywhere.
+
+`/` is an index of everything here. The player used to be at `/` and moved to
+`/home` — but encoded cartridges and shared `?src=<url>` links still point at
+the root, so `index.html` forwards anything carrying a query or a hash to
+`/home` with it intact rather than swallowing it.
 
 Add a cartridge and stega-now decodes it in the browser and plays back
 whatever it holds:
@@ -66,10 +71,11 @@ working, their data saved per cartridge and deleted with it.
 
 ## Sub-projects
 
-- [audio-console](audio-console/) — builds and plays albums: songs split
+- [album](album/) — builds and plays albums: songs split
   across one or more images per track, with a cover cartridge holding
   metadata, ownership, timestamped lyrics, and the key that decrypts the
   tracks.
+- [home](home/) — the player and the cartridge library. Was `/`.
 - [make](make/) — the editor. Drop in an image and some audio and get a
   cartridge back. Was make.stega.now's own repo.
 - [live](live/) — an homage to performances that have made me feel alive.

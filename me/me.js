@@ -195,7 +195,7 @@ const Me = (() => {
     ).join("");
 
   // ---- images ------------------------------------------------
-  // Same two helpers the audio console keeps: putImageData writes bytes
+  // Same two helpers the album page keeps: putImageData writes bytes
   // verbatim (no premultiplication), which matters because the STGC header
   // lives in the border alpha.
   const cnvEl = (w, h) =>
