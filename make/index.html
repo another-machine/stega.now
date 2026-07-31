@@ -14,7 +14,7 @@
       body {
         display: flex;
         flex-direction: column;
-        align-items: center;
+        align-items: flex-start;
         gap: var(--ht-flow);
         padding: var(--ht-space-6);
       }
@@ -24,7 +24,6 @@
         align-items: flex-start;
         gap: var(--ht-flow);
         width: 100%;
-        max-width: var(--ht-page-max);
       }
       section[hidden] {
         display: none;
@@ -393,12 +392,17 @@
         pointer-events: none;
       }
 
-      /* encoder layout: roomy main column + controls sidebar */
+      /* encoder layout: roomy main column + controls sidebar. The two columns
+         line up on their first text baseline, not their box tops — the main
+         column opens on a control row (inset by the button's padding and
+         border) and the sidebar on a bare label, so box-top alignment reads
+         as crooked. Baseline alignment re-derives itself if either side's
+         padding changes, which a hand-tuned offset would not. */
       .enc-layout {
         display: flex;
         gap: var(--ht-space-6);
         width: 100%;
-        align-items: flex-start;
+        align-items: baseline;
         flex-wrap: wrap;
       }
       .enc-main {
