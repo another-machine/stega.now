@@ -8,6 +8,6 @@
     "codec": "cp node_modules/@amplib/steganography/dist/stegassette.global.js lib/stegassette.js && cp node_modules/@amplib/steganography/dist/jobSchema.global.js lib/stegassette-jobs.js"
   },
   "devDependencies": {
-    "@amplib/steganography": "^1.1.0"
+    "@amplib/steganography": "^1.2.0"
   }
 }
