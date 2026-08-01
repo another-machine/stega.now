@@ -14,7 +14,12 @@
      components   recipes that earn a name    (reusable interface concepts)
      utilities    single-purpose escapes
 
-   Usage:  <link rel="stylesheet" href="amplib-ui.css">
+   Usage:  npm i @amplib/ui
+           @import "@amplib/ui";               (Vite, webpack)
+           @import "npm:@amplib/ui/ui.css";    (Parcel — it will not take a
+                                                bare specifier in CSS)
+           <link rel="stylesheet" href="ui.css">  (no build step)
+
            <body>  → dark (paper #000 / ink #fff)
            <body data-theme="light">    → inverted globally
            <body data-theme="auto">     → follows the system preference
@@ -83,7 +88,7 @@
        difference between 11px and 12px.
 
        Reference documentation needs a fourth rung and a bigger scale all
-       round; that is amplib-docs.css, a sibling file, and deliberately not a
+       round; that is docs.css, a sibling file, and deliberately not a
        mode of this one. A tool screen is a banner and then flat rows, and a
        heading size living in this scale is a heading size that ends up on a
        settings rail. */
@@ -1188,7 +1193,7 @@
   /* doc: prose page rhythm — sections apart, content within ------------------
      A tool's own prose: a readme screen, an about panel, release notes. Full
      reference documentation is a different job with a different scale, and it
-     has its own stylesheet — amplib-docs.css. */
+     has its own stylesheet — docs.css. */
   .doc {
     display: flex;
     flex-direction: column;

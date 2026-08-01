@@ -5,9 +5,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "codec": "cp node_modules/@amplib/steganography/dist/stegassette.global.js lib/stegassette.js && cp node_modules/@amplib/steganography/dist/jobSchema.global.js lib/stegassette-jobs.js"
+    "codec": "cp node_modules/@amplib/steganography/dist/stegassette.global.js lib/stegassette.js && cp node_modules/@amplib/steganography/dist/jobSchema.global.js lib/stegassette-jobs.js",
+    "css": "cp node_modules/@amplib/ui/ui.css node_modules/@amplib/ui/gallery.css ."
   },
   "devDependencies": {
-    "@amplib/steganography": "^1.2.0"
+    "@amplib/steganography": "^1.2.0",
+    "@amplib/ui": "^0.1.0"
   }
 }

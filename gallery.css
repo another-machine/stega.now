@@ -1,5 +1,5 @@
 /* ============================================================================
-   amplib-gallery — the exhibit language. A sibling to amplib-ui.css.
+   amplib-gallery — the exhibit language. A sibling to ui.css.
 
    Where amplib-ui is the tool language (monospaced, paper/ink, hairlines),
    this is the room the finished work hangs in: serif, letter-spaced, black.
@@ -13,7 +13,11 @@
      base         the dark serif page
      components   gallery · room · placard · work · rail
 
-   Usage:  <link rel="stylesheet" href="amplib-gallery.css">
+   Usage:  npm i @amplib/ui
+           @import "@amplib/ui/gallery.css";        (Vite, webpack)
+           @import "npm:@amplib/ui/gallery.css";    (Parcel — it will not take
+                                                     a bare specifier in CSS)
+           <link rel="stylesheet" href="gallery.css">  (no build step)
 
      <main class="gallery">                     vertical deck of rooms
      <main class="gallery" data-axis="x">       horizontal promenade
