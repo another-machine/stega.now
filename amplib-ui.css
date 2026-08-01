@@ -80,10 +80,25 @@
        (--ht-text-small) or the one title on the page (--ht-text-display).
        Hierarchy below that is carried by ink weight, tracking and case — a
        monospaced two-value system reads worse, not better, when you split the
-       difference between 11px and 12px. */
+       difference between 11px and 12px.
+
+       Reference documentation needs a fourth rung and a bigger scale all
+       round; that is amplib-docs.css, a sibling file, and deliberately not a
+       mode of this one. A tool screen is a banner and then flat rows, and a
+       heading size living in this scale is a heading size that ends up on a
+       settings rail. */
     --ht-text-small: 0.625rem; /* 10px */
     --ht-text-ui: 0.75rem; /* 12px */
     --ht-text-display: 1.5rem; /* 24px */
+
+    /* A floor for text-entry controls, not a fourth size. iOS Safari zooms the
+       page whenever a field computing under 16px takes focus, and it does not
+       zoom back out — the viewport keys that used to decline that are ignored,
+       so clearing the threshold is the only way out. Zero on a precise pointer,
+       where the behaviour does not exist and 16px controls would cost density
+       for nothing. Read as a max() at the control rather than as a size, so it
+       composes with whatever --ht-text-ui the density mode in scope has set. */
+    --ht-text-control-floor: 0px;
 
     --ht-leading-flat: 1;
     --ht-leading-ui: 1.5;
@@ -221,6 +236,14 @@
     --ht-control-size: var(--ht-control-size-sm);
   }
 
+  /* Touch: raise the control floor. Compact density does not lower it again —
+     11px is a density choice, and the zoom is not negotiable. */
+  @media (pointer: coarse) {
+    :root {
+      --ht-text-control-floor: 1rem; /* 16px */
+    }
+  }
+
   @media (prefers-contrast: more) {
     :root,
     [data-theme],
@@ -239,12 +262,17 @@
 @layer amplib.hypertokens {
   /* typography ------------------------------------------------------------ */
 
+  /* Each typography hypertoken declares the whole group it owns — case and
+     tracking included — so composing one onto any element lands the same way.
+     Without that, .ht-type-prose on an <h2> keeps the heading's uppercase, and
+     the class silently means something different depending on what it is on. */
   .ht-type-ui {
     font-family: var(--ht-font-mono);
     font-size: var(--ht-text-ui);
     font-weight: 400;
     line-height: var(--ht-leading-ui);
     letter-spacing: var(--ht-track-none);
+    text-transform: none;
     font-variant-numeric: tabular-nums;
   }
 
@@ -257,6 +285,7 @@
     font-weight: 400;
     line-height: var(--ht-leading-ui);
     letter-spacing: var(--ht-track-none);
+    text-transform: none;
     color: var(--ht-ink-faint);
     font-variant-numeric: tabular-nums;
   }
@@ -285,7 +314,10 @@
   .ht-type-prose {
     font-family: var(--ht-font-mono);
     font-size: var(--ht-text-ui);
+    font-weight: 400;
     line-height: var(--ht-leading-prose);
+    letter-spacing: var(--ht-track-none);
+    text-transform: none;
     max-inline-size: var(--ht-measure);
     text-wrap: pretty;
   }
@@ -293,7 +325,10 @@
   .ht-type-code {
     font-family: var(--ht-font-mono);
     font-size: var(--ht-text-small);
+    font-weight: 400;
     line-height: var(--ht-leading-ui);
+    letter-spacing: var(--ht-track-none);
+    text-transform: none;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     tab-size: 2;
@@ -858,9 +893,12 @@
     ),
   textarea,
   select {
-    /* = ht-type-ui + ht-shape-control + ht-participation-input + ht-time-ui */
+    /* = ht-type-ui + ht-shape-control + ht-participation-input + ht-time-ui,
+       with the control floor applied — see --ht-text-control-floor. This is the
+       whole set that iOS zooms for: buttons, checkboxes, radios, ranges and
+       colour swatches never take a text caret, so they keep the UI size. */
     font: inherit;
-    font-size: var(--ht-text-ui);
+    font-size: max(var(--ht-text-ui), var(--ht-text-control-floor));
     line-height: var(--ht-leading-ui);
     min-block-size: var(--ht-control-size);
     padding-block: var(--ht-pad-control-block);
@@ -1147,7 +1185,10 @@
     background-color: var(--ht-paper);
   }
 
-  /* doc: prose page rhythm — sections apart, content within ------------------ */
+  /* doc: prose page rhythm — sections apart, content within ------------------
+     A tool's own prose: a readme screen, an about panel, release notes. Full
+     reference documentation is a different job with a different scale, and it
+     has its own stylesheet — amplib-docs.css. */
   .doc {
     display: flex;
     flex-direction: column;
@@ -1214,8 +1255,16 @@
     display: none;
   }
 
+  /* Full ink, because .code sets the block to dim and a link is emphasis. The
+     hover has to be restated with it: this rule lives in a later layer than the
+     base link styles, so without it the inversion keeps its ink background and
+     loses its paper text — an invisible link. */
   .code a {
     color: var(--ht-ink);
+  }
+
+  .code a:hover {
+    color: var(--ht-paper);
   }
 
   /* panel: bordered region with an optional header bar --------------------- */
@@ -1638,6 +1687,13 @@
 
   .u-nowrap {
     white-space: nowrap;
+  }
+
+  /* Never smooth this image. Separate from .ht-media-raw, which pixelates as
+     part of a whole framing decision — sometimes the only thing you mean is
+     that the pixels are the payload, and an interpolated one misreports it. */
+  .u-pixelated {
+    image-rendering: pixelated;
   }
 
   .u-dim {
