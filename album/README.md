@@ -1,6 +1,6 @@
 # album
 
-Builds and plays **albums** made of stegassette STGC stegassettes. Runs entirely
+Builds and plays **albums** made of STGC stegassettes. Runs entirely
 in the browser — open `album/` from the served repo, no build step.
 
 An album is a folder of PNGs:

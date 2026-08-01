@@ -1,6 +1,6 @@
 # stega-now
 
-Playback for stegassette STGC stegassette PNGs. Static — `home/index.html` +
+Playback for STGC stegassette PNGs. Static — `home/index.html` +
 `lib/stegassette.js`, serve anywhere.
 
 `/` is an index of everything here. The player used to be at `/` and moved to
