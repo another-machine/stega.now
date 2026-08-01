@@ -1,7 +1,7 @@
 # make
 
 The stegassette editor. Drop in an image and some audio, choose how to hide one
-in the other, and get a cartridge PNG back.
+in the other, and get a stegassette PNG back.
 
 One HTML file, no build step. It loads the same `../lib/stegassette.js` the
 player and the galleries do, plus `../lib/stegassette-jobs.js` for the job
@@ -21,7 +21,7 @@ page while also carrying a batch pipeline and gigabytes of media.
 
 Audio PCM bytes are written into the RGB channels of a checkerboard pattern of "data pixels." Each data pixel is paired with a "key pixel" from the original image. A combine operation (XOR, midpoint, additive, etc.) maps the audio byte value into the pixel delta between the pair, so the image appears visually similar to the source. A fixed binary header (`STGC`) is stored in the alpha channel of the bottom border row.
 
-A single PNG can carry multiple payloads — audio plus optional `text/plain` entries — described by a compact entry table at the start of the interior stream. Audio is optional: a cartridge of only text/files encodes fine. A long recording can also be **split across a series of images**, each carrying one chunk of the audio plus its own text (see [`split`](#one-audio-across-many-images--split)).
+A single PNG can carry multiple payloads — audio plus optional `text/plain` entries — described by a compact entry table at the start of the interior stream. Audio is optional: a stegassette of only text/files encodes fine. A long recording can also be **split across a series of images**, each carrying one chunk of the audio plus its own text (see [`split`](#one-audio-across-many-images--split)).
 
 Four orthogonal, header-persisted dimensions control the look and layout:
 
@@ -46,7 +46,7 @@ Serve `index.html` from any static file server (e.g. `python3 -m http.server`) a
 
 **player** — drop an encoded PNG to decode and play back the audio. A waveform overlay shows playback position. Use "↓ reconstruct" to export the raw PCM.
 
-**capture modes** — a mode bar picks what a cartridge is made from. The settings sidebar, entries list, jobs queue and player are shared by all four; only the capture area changes. A mode is never stored in the JSON — it is **derived** from the job (`StegConfig.jobMode`), so a jobs file and the editor can't disagree:
+**capture modes** — a mode bar picks what a stegassette is made from. The settings sidebar, entries list, jobs queue and player are shared by all four; only the capture area changes. A mode is never stored in the JSON — it is **derived** from the job (`StegConfig.jobMode`), so a jobs file and the editor can't disagree:
 
 | mode     | source                                                     | job shape                        |
 | -------- | ---------------------------------------------------------- | -------------------------------- |
@@ -55,7 +55,7 @@ Serve `index.html` from any static file server (e.g. `python3 -m http.server`) a
 | `series` | one audio divided across several images                    | a `split` block                  |
 | `video`  | stills grabbed off a video, tiled into the cover           | a `frames` block                 |
 
-**chunk editor (series)** — the trim region is the *source window*; chunks subdivide it. Divide into N `equal` chunks, `fit MP` to a per-image pixel budget, or click the waveform and `÷ at caret`. Each chunk gets its own cover — drop a set of images and press `↧ images`, which assigns them in filename order, and with no chunks made yet divides the window into one chunk per image (usually what you want: the covers are the count). Each chunk also gets its own `out` path and its own text entries — the shared entries below the waveform go on every chunk. Chunk boundaries are drawn over both waveforms; clicking a chunk's number loads it into the trim + image slots so `▶` previews it and `encode` renders that one cartridge. `encode all ↓` renders and downloads every chunk, and `copy json` emits either the compact `split` job or the expanded jobs array.
+**chunk editor (series)** — the trim region is the *source window*; chunks subdivide it. Divide into N `equal` chunks, `fit MP` to a per-image pixel budget, or click the waveform and `÷ at caret`. Each chunk gets its own cover — drop a set of images and press `↧ images`, which assigns them in filename order, and with no chunks made yet divides the window into one chunk per image (usually what you want: the covers are the count). Each chunk also gets its own `out` path and its own text entries — the shared entries below the waveform go on every chunk. Chunk boundaries are drawn over both waveforms; clicking a chunk's number loads it into the trim + image slots so `▶` previews it and `encode` renders that one stegassette. `encode all ↓` renders and downloads every chunk, and `copy json` emits either the compact `split` job or the expanded jobs array.
 
 **jobs queue** — drop a jobs array (the same `jobs/*.json` schema) to load every item as a clickable list. Selecting an item loads its settings + texts (and, for a `split` job, its chunk rows); if you also drop the referenced images/audio (matched by filename) they auto-attach. "copy as json" exports the current item.
 
@@ -89,7 +89,7 @@ Top-level fields control image sourcing and steg/visual settings:
 | `kx`        | `0`        | x offset for `offset` keymap (torus-wrapped)                                                  |
 | `ky`        | `0`        | y offset for `offset` keymap (torus-wrapped)                                                  |
 
-`entries` is an ordered array. Audio is optional — a job with only file/text entries encodes a data-only cartridge. Each item is one of:
+`entries` is an ordered array. Audio is optional — a job with only file/text entries encodes a data-only stegassette. Each item is one of:
 
 **Audio entry** — encoded through the ffmpeg pipeline:
 

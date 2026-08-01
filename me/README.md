@@ -1,9 +1,9 @@
 # me
 
-A cartridge of you: a picture with your own voice hidden in its pixels. Runs
+A stegassette of you: a picture with your own voice hidden in its pixels. Runs
 entirely in the browser — open `me/` from the served repo, no build step.
 
-One PNG comes out, and it is a plain STGC cartridge:
+One PNG comes out, and it is a plain STGC stegassette:
 
 ```
 me-<who>-<date>.png    a raw PCM entry (the sound) and me.json — who it is
@@ -12,9 +12,9 @@ me-<who>-<date>.png    a raw PCM entry (the sound) and me.json — who it is
 ```
 
 The sound is deliberately the **first** entry, so a player that has never
-heard of stega-me opens the cartridge on it: drop one into the plain
+heard of stega-me opens the stegassette on it: drop one into the plain
 stega-now player and it plays the voice while the picture develops out of
-its own pixels. Nothing here is a private format — it is the cartridge
+its own pixels. Nothing here is a private format — it is the stegassette
 format, used for one person.
 
 ## Two halves
@@ -42,7 +42,7 @@ do, and the samples are the part this can't do without.
 
 You can also **use a video file** instead of the camera, and its own audio
 comes back out of it with the browser's decoder. If the browser refuses that
-container, the build says so rather than making a silent cartridge.
+container, the build says so rather than making a silent stegassette.
 
 **Images and a message** is the other way round: hand it pictures, record a
 voice message into them. Fewer images than frames repeat around the layout.
@@ -59,7 +59,7 @@ share of the short side, `matte` is what shows through the gaps.
 
 ## Size
 
-The cartridge is rendered at the size the sound needs, rather than scaling a
+The stegassette is rendered at the size the sound needs, rather than scaling a
 small composite up: the frames are drawn straight at the final resolution, so
 every data pixel carries a real sample and the picture is as sharp as the
 camera allowed.
@@ -97,12 +97,12 @@ border, and `surprise me` if you would rather not choose:
   each byte to all three for a grey ghost, at one byte per pixel — three
   times the pixels for the same sound.
 
-The choice is written into me.json and carried in the cartridge's own header,
+The choice is written into me.json and carried in the stegassette's own header,
 so playing it back needs no configuring.
 
 ## Play
 
-`play one` reads a cartridge back: who it is from, the format, the pattern,
+`play one` reads a stegassette back: who it is from, the format, the pattern,
 and the sound with the picture developing as it plays. Drag the playhead and
-the picture re-develops from there. Any STGC cartridge with a PCM entry plays
+the picture re-develops from there. Any STGC stegassette with a PCM entry plays
 here, stega-me or not.

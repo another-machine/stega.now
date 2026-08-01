@@ -1,14 +1,14 @@
 # stega-now
 
-Playback for stegassette STGC cartridge PNGs. Static — `home/index.html` +
+Playback for stegassette STGC stegassette PNGs. Static — `home/index.html` +
 `lib/stegassette.js`, serve anywhere.
 
 `/` is an index of everything here. The player used to be at `/` and moved to
-`/home` — but encoded cartridges and shared `?src=<url>` links still point at
+`/home` — but encoded stegassettes and shared `?src=<url>` links still point at
 the root, so `index.html` forwards anything carrying a query or a hash to
 `/home` with it intact rather than swallowing it.
 
-Add a cartridge and stega-now decodes it in the browser and plays back
+Add a stegassette and stega-now decodes it in the browser and plays back
 whatever it holds:
 
 | entry mimetype | playback                                   |
@@ -20,26 +20,26 @@ whatever it holds:
 | `audio/*`      | `<audio>` element (loopable)               |
 | anything else  | download link                              |
 
-A cartridge with an HTML entry boots that entry. While playing, a slim bar
-shows the cartridge name and an eject button; entry buttons join it when the
-cartridge holds more than one entry.
+A stegassette with an HTML entry boots that entry. While playing, a slim bar
+shows the stegassette name and an eject button; entry buttons join it when the
+stegassette holds more than one entry.
 
 ## Reveal
 
 Encoding hid the payload in the cover's pixels, so reading it back develops
 the cover again: the encoded image sits over the reconstruction and every
 pixel that has been read is cleared away, resolving the picture in the
-cartridge's own traversal order.
+stegassette's own traversal order.
 
 Audio drives it directly — the image develops as its own sound plays, and
-loops redevelop it. Cartridges with no audio have no playhead, so their
-reveal runs fast on a timer with a `replay` button; data-only cartridges open
-on it, and any cartridge's reveal is a click away via `reveal` in the bar.
+loops redevelop it. Stegassettes with no audio have no playhead, so their
+reveal runs fast on a timer with a `replay` button; data-only stegassettes open
+on it, and any stegassette's reveal is a click away via `reveal` in the bar.
 
 ## Groups
 
 A stegassette split spreads one audio track across many images. `select`
-switches the library into selection mode; tick two or more cartridges and
+switches the library into selection mode; tick two or more stegassettes and
 `group` puts them in a group, ordered automatically by the numbering in
 their names (`(3/12)`, or a trailing number). A group previews its members on
 the main page; `edit` renames, reorders, or removes parts.
@@ -52,36 +52,36 @@ its parts to play one at a time.
 
 ## Library
 
-Added cartridges are kept as blobs in IndexedDB. When nothing is playing you
-see the library: the cartridge images themselves. Click one to play it,
+Added stegassettes are kept as blobs in IndexedDB. When nothing is playing you
+see the library: the stegassette images themselves. Click one to play it,
 **hold it down to delete it**, `add` to load PNGs — one plays straight away,
 several stay in the library in name order, ready to group. The playing
-cartridge stays active across reloads until you eject.
+stegassette stays active across reloads until you eject.
 
-`?src=<url>` fetches a cartridge PNG (same-origin or CORS), stores it in the
+`?src=<url>` fetches a stegassette PNG (same-origin or CORS), stores it in the
 library, and plays it — a direct link to an app.
 
 ## Sandbox
 
-HTML cartridges run in a sandboxed iframe — an opaque origin, so a cartridge
-can't touch this site's storage, cookies, or DOM, or another cartridge's
-data. The sandbox also blocks the cartridge's own `localStorage`, so the
-player injects a shim: cartridge apps that use plain `localStorage` keep
-working, their data saved per cartridge and deleted with it.
+HTML stegassettes run in a sandboxed iframe — an opaque origin, so a stegassette
+can't touch this site's storage, cookies, or DOM, or another stegassette's
+data. The sandbox also blocks the stegassette's own `localStorage`, so the
+player injects a shim: stegassette apps that use plain `localStorage` keep
+working, their data saved per stegassette and deleted with it.
 
 ## Sub-projects
 
 - [album](album/) — builds and plays albums: songs split
-  across one or more images per track, with a cover cartridge holding
+  across one or more images per track, with a cover stegassette holding
   metadata, ownership, timestamped lyrics, and the key that decrypts the
   tracks.
-- [home](home/) — the player and the cartridge library. Was `/`.
+- [home](home/) — the player and the stegassette library. Was `/`.
 - [make](make/) — the editor. Drop in an image and some audio and get a
-  cartridge back. Was make.stega.now's own repo.
+  stegassette back. Was make.stega.now's own repo.
 - [live](live/) — an homage to performances that have made me feel alive.
   Screenshots of videos with the sound in their pixels. Was amplib.app/live.
 - [geese](geese/) — was amplib.app/geese-basement.
-- [me](me/) — a cartridge of you: record yourself, lay frames out in a
+- [me](me/) — a stegassette of you: record yourself, lay frames out in a
   template, and hide the recording's own audio in the picture — or record a
   message into images you already have.
 

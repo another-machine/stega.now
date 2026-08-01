@@ -627,7 +627,7 @@
 
     <!-- ═══ ENCODER ═══ -->
     <section id="encSection">
-      <!-- capture mode: which source material this cartridge is made from.
+      <!-- capture mode: which source material this stegassette is made from.
            everything downstream (settings, entries, encode, player) is shared. -->
       <div class="mode-bar" id="modeBar">
         <div class="tabs">
@@ -1631,7 +1631,7 @@
       const modeBar = document.getElementById("modeBar");
       const modeNote = document.getElementById("modeNote");
       const MODE_NOTES = {
-        data: "no audio · image + entries = a data-only cartridge",
+        data: "no audio · image + entries = a data-only stegassette",
         clip: "one image · one trimmed audio clip",
         series: "one audio divided across several images, each with its own text",
         video: "stills grabbed off a video, tiled into the cover",
@@ -1990,7 +1990,7 @@
           .filter((e) => e.isText)
           .map((e) => ({ name: e.name || "", text: e.textEl ? e.textEl.value : "" }));
 
-        // data mode: no audio at all — a data-only cartridge
+        // data mode: no audio at all — a data-only stegassette
         if (encMode === "data") {
           job.entries = textEntries;
           return job;
@@ -2386,7 +2386,7 @@
       }
 
       // load a chunk into the trim + image slots so ▶ previews it and `encode`
-      // renders that one cartridge
+      // renders that one stegassette
       function selectChunk(i) {
         const c = chunks[i];
         if (!c || !encAudioBuf) return;
@@ -3748,7 +3748,7 @@
 
       // ── encode readiness ──────────────────────────────────────────────
 
-      // data mode encodes a cartridge with no audio at all; every other mode
+      // data mode encodes a stegassette with no audio at all; every other mode
       // needs both a cover and a decoded buffer
       function checkEncReady() {
         const haveImg = !!(encImgFile || encFrameCanvases.length > 0);
@@ -3907,7 +3907,7 @@
       // ── encode ────────────────────────────────────────────────────────
 
       // In series mode the encode button renders the SELECTED chunk — the same
-      // cartridge "encode all" would produce for it, straight into the player.
+      // stegassette "encode all" would produce for it, straight into the player.
       encBtn.addEventListener("click", () => runEncode(selectedChunkOverride()));
       function selectedChunkOverride() {
         if (encMode !== "series" || chunkSel < 0) return null;

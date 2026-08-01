@@ -412,7 +412,7 @@
       </div>
 
       <div class="ht-arrange-row">
-        <button id="makeBtn" disabled>make the cartridge</button>
+        <button id="makeBtn" disabled>make the stegassette</button>
         <progress id="mprog" class="u-inline" value="0" max="1" hidden></progress>
         <span id="mstatus" class="u-dim"></span>
       </div>
@@ -423,9 +423,9 @@
     <!-- ═══ PLAY ════════════════════════════════════════════ -->
     <section id="play" hidden>
       <div class="drop" id="pdrop">
-        <span class="drop__label">drop a cartridge PNG here</span>
+        <span class="drop__label">drop a stegassette PNG here</span>
         <span class="drop__sub"
-          >any STGC cartridge with a PCM entry plays here — a stega-me one also
+          >any STGC stegassette with a PCM entry plays here — a stega-me one also
           shows who it is from</span
         >
         <input type="file" id="pfiles" accept="image/png" multiple hidden />
@@ -968,7 +968,7 @@
           });
           const url = URL.createObjectURL(out.blob);
           $("mout").innerHTML =
-            `<div class="ht-arrange-row"><img id="outImg" src="${url}" alt="the cartridge"></div>` +
+            `<div class="ht-arrange-row"><img id="outImg" src="${url}" alt="the stegassette"></div>` +
             `<div class="ht-arrange-row"><a href="${url}" download="${out.name}">download ${out.name}</a>` +
             `<span class="ht-type-small">${out.width}×${out.height} · ` +
             `${(out.blob.size / 1048576).toFixed(2)} MB · ` +
@@ -978,7 +978,7 @@
             `</span><button id="playIt">play it here</button></div>`;
           $("playIt").addEventListener("click", () => {
             setMode("play");
-            loadCartridge(out.blob, out.name);
+            loadStegassette(out.blob, out.name);
           });
           $("mstatus").textContent = "made";
         } catch (err) {
@@ -1015,9 +1015,9 @@
         $("pplay").textContent = "play";
       }
 
-      async function loadCartridge(blob, name) {
+      async function loadStegassette(blob, name) {
         stopPlay();
-        $("pstatus").textContent = "reading " + (name || "the cartridge");
+        $("pstatus").textContent = "reading " + (name || "the stegassette");
         try {
           const c = await Me.read(blob);
           if (!c.audioEntry) throw new Error("no sound in this one");
@@ -1048,7 +1048,7 @@
                 .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
                 .join("") +
               `</table>`
-            : `<div class="ht-type-small">not a stega-me cartridge — playing its sound anyway</div>`;
+            : `<div class="ht-type-small">not a stega-me stegassette — playing its sound anyway</div>`;
           $("pMethod").textContent =
             `${c.opts.combine} / ${c.opts.traversal} / ${c.opts.keyMap}` +
             (c.opts.pack !== "packed" ? " / " + c.opts.pack : "") +
@@ -1126,7 +1126,7 @@
 
       const takeCart = (files) => {
         const f = files.find((x) => /\.png$/i.test(x.name));
-        if (f) loadCartridge(f, f.name);
+        if (f) loadStegassette(f, f.name);
         else $("pstatus").textContent = "no PNG in that";
       };
       $("ppick").addEventListener("click", () => $("pfiles").click());

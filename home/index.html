@@ -21,7 +21,7 @@
         flex-direction: column;
       }
 
-      /* top bar while a cartridge is playing — a masthead that can hide */
+      /* top bar while a stegassette is playing — a masthead that can hide */
       #bar {
         display: none;
         align-items: center;
@@ -230,7 +230,7 @@
         />
       </div>
       <p id="hint" class="ht-type-small" hidden>
-        select cartridges to group or delete them
+        select stegassettes to group or delete them
       </p>
       <p id="err" class="status"></p>
     </div>
@@ -241,7 +241,7 @@
       "use strict";
       console.log("stegassette codec " + Stegassette.CODEC_VERSION);
       /* ==========================================================
-         stega-now — playback for stegassette STGC cartridge PNGs.
+         stega-now — playback for stegassette STGC stegassette PNGs.
          Decodes in-browser via @amplib/steganography and plays back entries:
            text/html → sandboxed full-viewport app
            text/*    → text
@@ -249,14 +249,14 @@
            audio/L*  → raw STGC PCM via Web Audio
            audio/*   → <audio> element
            anything  → download link
-         Cartridges you add are kept as blobs in IndexedDB (disk-
+         Stegassettes you add are kept as blobs in IndexedDB (disk-
          scale quota — big images are fine); the active pointer and
-         per-cartridge app data stay in localStorage (small, and the
+         per-stegassette app data stay in localStorage (small, and the
          app-data seed must be read synchronously). When nothing is
          playing, the library shows them. Click to play, hold to
-         delete. ?src=<url> fetches, stores, and plays a cartridge.
+         delete. ?src=<url> fetches, stores, and plays a stegassette.
 
-         Cartridges can be grouped and ordered — a stegassette split
+         Stegassettes can be grouped and ordered — a stegassette split
          spreads one audio track across many images, and a group puts
          those parts back in sequence. Playing a group whose parts all
          carry audio concatenates their PCM into one buffer, so the
@@ -268,7 +268,7 @@
       const appKey = (id) => "stega-now:app:" + id;
       const $ = (id) => document.getElementById(id);
 
-      let current = null; // single cartridge: { rec, entries, opts }
+      let current = null; // single stegassette: { rec, entries, opts }
       let currentGroup = null; // group playback: the group record
       let selected = -1;
       let selecting = false; // library selection mode
@@ -281,7 +281,7 @@
         audioTimer = null;
       const blobUrls = [];
 
-      // ---- cartridge + group store (IndexedDB) --------------------
+      // ---- stegassette + group store (IndexedDB) --------------------
       let dbPromise = null;
       function db() {
         if (!dbPromise)
@@ -339,7 +339,7 @@
         try {
           await libPut(rec);
         } catch (_) {
-          alert("cartridge could not be saved — playing without saving");
+          alert("stegassette could not be saved — playing without saving");
         }
         return rec;
       }
@@ -372,7 +372,7 @@
       // Membership is exclusive — grouping a cart pulls it out of any
       // group it was already in, so the library shows each cart once.
 
-      // Sort key from a cartridge name: prefer a split's "(3/12)",
+      // Sort key from a stegassette name: prefer a split's "(3/12)",
       // else the last number in the name ("15-step-03.png" → 3).
       function orderKey(name) {
         const s = String(name || "");
@@ -476,10 +476,10 @@
         // the Img is kept so playback can animate the decode (see buildReveal)
         return { ...Stegassette.decodeContainer(img, img), img };
       }
-      // Check a file really is a cartridge without paying for a full decode:
+      // Check a file really is a stegassette without paying for a full decode:
       // the STGC header lives in the border alpha, so reading it costs
       // nothing next to walking the whole interior. Throws if it isn't one.
-      async function checkCartridge(bytes) {
+      async function checkStegassette(bytes) {
         Stegassette.unpackStgcHeaderAlpha(await toImg(bytes));
       }
 
@@ -495,9 +495,9 @@
 
       // ---- sandbox + storage bridge -------------------------------
       // html entries run in a sandboxed iframe (opaque origin — no access
-      // to this site or other cartridges). The sandbox also blocks the
-      // cartridge's own localStorage, so a synchronous shim is injected,
-      // seeded from this cartridge's saved data; writes post back here and
+      // to this site or other stegassettes). The sandbox also blocks the
+      // stegassette's own localStorage, so a synchronous shim is injected,
+      // seeded from this stegassette's saved data; writes post back here and
       // persist under "stega-now:app:<id>".
       function shimHtml(html, seedObj) {
         const seed = JSON.stringify(seedObj).replace(/</g, "\\u003c");
@@ -518,7 +518,7 @@
           "})()<\/scr" +
           "ipt>";
         // inject after <head>/<html>/doctype — a script before <!DOCTYPE>
-        // would flip the cartridge document into quirks mode
+        // would flip the stegassette document into quirks mode
         const m =
           html.match(/<head[^>]*>/i) ||
           html.match(/<html[^>]*>/i) ||
@@ -883,7 +883,7 @@
           .map((id) => lib.find((r) => r.id === id))
           .filter(Boolean);
         if (!recs.length) {
-          $("err").textContent = "✗ " + grp.name + ": no cartridges left";
+          $("err").textContent = "✗ " + grp.name + ": no stegassettes left";
           removeActive();
           return false;
         }
@@ -1065,7 +1065,7 @@
         tabs.innerHTML = "";
         if (!current) return;
         // entry buttons when there's a choice — always while the reveal
-        // is up, so a single-entry cartridge can get back to its entry
+        // is up, so a single-entry stegassette can get back to its entry
         if (current.entries.length > 1 || selected === -2)
           current.entries.forEach((e, i) => {
             const b = document.createElement("button");
@@ -1116,7 +1116,7 @@
         const hasAudio = dec.entries.some((e) =>
           ["pcm", "audio"].includes(kindOf(e.mimetype)),
         );
-        // data-only cartridges open on the reveal — there's no playhead to
+        // data-only stegassettes open on the reveal — there's no playhead to
         // drive it, so it runs fast and can be replayed. Apps still boot
         // straight in; their reveal is a click away in the bar.
         if (first < 0 && !hasAudio) showReveal();
@@ -1143,7 +1143,7 @@
       }
 
       // ---- library ------------------------------------------------
-      // One object URL per cartridge, kept for as long as the cartridge
+      // One object URL per stegassette, kept for as long as the stegassette
       // exists. Minting fresh ones per render made every thumbnail decode
       // again, so the library blinked on each re-render.
       const thumbUrls = new Map();
@@ -1212,7 +1212,7 @@
           grid.appendChild(tile);
         }
 
-        // then loose cartridges (a grouped one shows inside its group)
+        // then loose stegassettes (a grouped one shows inside its group)
         for (const rec of lib) {
           if (grouped.has(rec.id)) continue;
           const b = document.createElement("button");
@@ -1261,7 +1261,7 @@
         const ungroupB = document.createElement("button");
         ungroupB.textContent = "ungroup";
         ungroupB.addEventListener("click", () => {
-          if (!confirm("ungroup " + g.name + "? (cartridges stay)")) return;
+          if (!confirm("ungroup " + g.name + "? (stegassettes stay)")) return;
           grpDel(g.id).then(() => {
             editing = null;
             renderGrid();
@@ -1339,7 +1339,7 @@
       $("delete").addEventListener("click", async () => {
         if (!picked.size) return;
         const n = picked.size;
-        if (!confirm("delete " + n + " cartridge" + (n === 1 ? "" : "s") + "?"))
+        if (!confirm("delete " + n + " stegassette" + (n === 1 ? "" : "s") + "?"))
           return;
         for (const id of [...picked]) await removeFromLib(id);
         selecting = false;
@@ -1365,14 +1365,14 @@
           }
           try {
             const bytes = new Uint8Array(await f.arrayBuffer());
-            await checkCartridge(bytes); // reject non-cartridges before storing
+            await checkStegassette(bytes); // reject non-stegassettes before storing
             added.push(await addToLib(f.name, bytes));
           } catch (err) {
             failed.push(f.name + ": " + err.message);
           }
         }
         $("err").textContent = failed.length ? "✗ " + failed.join("; ") : "";
-        // one cartridge plays straight away; a batch stays in the library,
+        // one stegassette plays straight away; a batch stays in the library,
         // ready to be grouped
         if (added.length === 1 && !failed.length) play(added[0]);
         else renderGrid();
@@ -1394,7 +1394,7 @@
             const bytes = new Uint8Array(await r.arrayBuffer());
             await decodeBytes(bytes);
             const rec = await addToLib(
-              src.split("/").pop() || "cartridge.png",
+              src.split("/").pop() || "stegassette.png",
               bytes,
             );
             if (await play(rec)) return;

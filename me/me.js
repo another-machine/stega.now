@@ -2,7 +2,7 @@
 /* ============================================================
    me.js — the stega-me format.
 
-   One cartridge, one person: a picture of you with your own voice
+   One stegassette, one person: a picture of you with your own voice
    hidden inside it.
 
      me-<who>-<date>.png   a raw PCM entry (the sound) followed by
@@ -11,7 +11,7 @@
                            and the pattern used to hide it)
 
    The audio entry comes FIRST on purpose: a player with no idea what
-   stega-me is opens a cartridge on its first entry, so it lands on the
+   stega-me is opens a stegassette on its first entry, so it lands on the
    sound and develops the picture while the voice plays.
 
    Two halves, and they compose freely:
@@ -22,7 +22,7 @@
      the sound     the audio recorded alongside that video, or a
                    message recorded into a picture on its own
 
-   The cartridge is rendered at the size the audio needs, instead of
+   The stegassette is rendered at the size the audio needs, instead of
    scaling a small composite up to fit: the frames are drawn straight
    at the final resolution, so the picture is as sharp as the camera
    allowed and every data pixel carries a real sample.
@@ -297,7 +297,7 @@ const Me = (() => {
   }
 
   // ---- sizing ------------------------------------------------
-  // How big the cartridge has to be to hold `bytes` at `bpp` bytes per data
+  // How big the stegassette has to be to hold `bytes` at `bpp` bytes per data
   // pixel, at the requested aspect. Two floors raise it: `minLong`, because a
   // short message would otherwise come out as a thumbnail, and `minWidth` —
   // the width the STGC header itself occupies, below which encoding refuses.
@@ -397,7 +397,7 @@ const Me = (() => {
     return n;
   }
 
-  // What one cartridge is going to cost, before anything is recorded — the
+  // What one stegassette is going to cost, before anything is recorded — the
   // estimate line and the real build both go through this.
   function plan({ seconds, rate, bits, channels, aspect, steg, minLong, noteBytes = 400 }) {
     const frames = Math.max(1, Math.round((seconds || 0) * rate));
@@ -428,7 +428,7 @@ const Me = (() => {
     });
     // How much of the picture the sound actually reaches. Pixels past the
     // payload are never written, so they are already developed when playback
-    // starts — a cartridge sized well past its sound only animates a strip of
+    // starts — a stegassette sized well past its sound only animates a strip of
     // itself. Worth knowing before it is made rather than after.
     const room = Stegassette.dataPixelCount(dims.W - 2 * dims.B, dims.H - 2 * dims.B);
     const fill = Math.min(1, Math.ceil(bytes / bpp) / Math.max(1, room));
@@ -694,7 +694,7 @@ const Me = (() => {
       steg: method,
     };
 
-    // The sound goes first so any player opens the cartridge on it and
+    // The sound goes first so any player opens the stegassette on it and
     // develops the picture while it plays.
     const entries = [
       {
@@ -768,7 +768,7 @@ const Me = (() => {
       carrier,
     );
 
-    onProgress("writing the cartridge", 0.85);
+    onProgress("writing the stegassette", 0.85);
     await tick();
     const blob = await imgToPngBlob(out);
     onProgress("done", 1);
@@ -784,7 +784,7 @@ const Me = (() => {
   }
 
   // ---- read --------------------------------------------------
-  // Anything this reads back is a plain STGC cartridge, so me.json missing
+  // Anything this reads back is a plain STGC stegassette, so me.json missing
   // isn't fatal: the sound and the picture are still there.
   async function read(blob) {
     const img = await imgFromBlob(blob);

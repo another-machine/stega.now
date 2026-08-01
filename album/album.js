@@ -2,7 +2,7 @@
 /* ============================================================
    album.js — the stega-album format.
 
-   An album is a folder of STGC cartridge PNGs:
+   An album is a folder of STGC stegassette PNGs:
 
      00-cover-<slug>.png    the record itself. Carries album.json:
                             metadata, ownership, per-track lyrics with
@@ -17,7 +17,7 @@
    stream back exactly.
 
    "Encryption" here is possession-based, and worth being precise about:
-   the AES-GCM key lives in the cover cartridge, so the tracks are noise
+   the AES-GCM key lives in the cover stegassette, so the tracks are noise
    without it — you need the original album to play the songs. It is NOT
    protection against someone who has the cover: holding the record means
    holding the key. That is the intent (a record you own), not a DRM claim.
@@ -29,13 +29,9 @@ const Album = (() => {
   const PART_ENTRY = "part.json";
 
   // Encrypted payloads are high-entropy, so a low-strength combine keeps
-  // the artwork readable underneath. All combines are lossless.
-  const STEG = {
-    combine: "veil",
-    traversal: "hilbert",
-    keymap: "adjacent",
-    border: 0.02,
-  };
+  // the artwork readable underneath. All combines are lossless. This is the
+  // codec's collection default; albums have never wanted anything else.
+  const STEG = Stegassette.COLLECTION_STEG;
   // the methods a build can choose from, straight out of the format
   const METHODS = {
     combine: Stegassette.COMBINE_NAMES,
@@ -47,56 +43,29 @@ const Album = (() => {
   const dec = new TextDecoder();
 
   // ---- small helpers -----------------------------------------
-  const b64 = (u8) => {
-    let s = "";
-    for (let i = 0; i < u8.length; i += 0x8000)
-      s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
-    return btoa(s);
-  };
-  const unb64 = (s) => {
-    const raw = atob(s);
-    const u8 = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
-    return u8;
-  };
-  const hex = (n) =>
-    Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) =>
-      b.toString(16).padStart(2, "0"),
-    ).join("");
-  function slug(s) {
-    return (
-      String(s || "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 48) || "untitled"
-    );
-  }
+  // base64, slug, hexId and the AES-GCM pair come from the codec's collection
+  // layer (2026.08.01). They used to live here and be hand-ported into the
+  // Node jobs repo, which meant two implementations of the same format kept in
+  // step by discipline. One copy now serves both.
+  const {
+    toBase64: b64,
+    fromBase64: unb64,
+    hexId: hex,
+    slug,
+    newKey,
+    importKey,
+    encryptBytes,
+    decryptBytes,
+    splitStream,
+    joinParts,
+  } = Stegassette;
+
+  // Display-only, so it stays local: too generic a name to belong in the
+  // codec's public surface.
   const pad = (n, w) => String(n).padStart(w, "0");
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec || 0));
     return ((sec / 60) | 0) + ":" + pad(sec % 60, 2);
-  }
-
-  // ---- keys --------------------------------------------------
-  const newKey = () => b64(crypto.getRandomValues(new Uint8Array(32)));
-  const importKey = (keyB64) =>
-    crypto.subtle.importKey("raw", unb64(keyB64), "AES-GCM", false, [
-      "encrypt",
-      "decrypt",
-    ]);
-  async function encryptBytes(key, bytes) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const out = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, bytes);
-    return { iv: b64(iv), data: new Uint8Array(out) };
-  }
-  async function decryptBytes(key, ivB64, bytes) {
-    const out = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: unb64(ivB64) },
-      key,
-      bytes,
-    );
-    return new Uint8Array(out);
   }
 
   // ---- images ------------------------------------------------
@@ -144,60 +113,14 @@ const Album = (() => {
       cnv.toBlob((b) => (b ? res(b) : rej(new Error("PNG encode failed"))), "image/png"),
     );
   }
-  // entries → a cartridge PNG carried by srcImg.
-  // The artwork keeps its own resolution whenever it already has room for
-  // the payload — scaling it down to the exact fit would turn an album
-  // cover into a thumbnail. It is only resized when it is too small.
-  async function encodeCartridge(entries, srcImg, steg = STEG) {
-    const total = Stegassette.containerInteriorBytes(entries);
-    const aspect = srcImg.width / srcImg.height;
-    const dataPx = Math.ceil(total / 3);
-    const B = Stegassette.resolveBorderWidth(steg.border, dataPx, aspect);
-    const nativeB = Stegassette.resolveBorderWidth(
-      steg.border,
-      Math.ceil((srcImg.width * srcImg.height) / 2),
-      aspect,
-    );
-    // `keymap`, not `keyMap`. The package throws on the old spelling rather
-    // than silently defaulting to "adjacent", which is what it used to do.
-    // Albums built before the rename persisted `keyMap` into album.json, so
-    // accept either here — this is the one place old records flow back in.
-    const opts = {
-      combine: steg.combine,
-      keymap: steg.keymap || steg.keyMap || "adjacent",
-      traversal: steg.traversal,
-      params: {},
-    };
-    // the width the header itself needs; a small payload would otherwise
-    // size the canvas below it and encoding would refuse
-    const minWidth = Stegassette.stgcHeaderWidth(opts);
-    const capacity =
-      Stegassette.dataPixelCount(
-        srcImg.width - 2 * nativeB,
-        srcImg.height - 2 * nativeB,
-      ) * 3;
-    // An odd width orphans the last data pixel of every odd row (its key
-    // reflects back in-row and collides with its neighbour's), so keeping the
-    // artwork at native size is only safe on an even width — crop a column
-    // rather than rescale the whole picture.
-    const evenSrc =
-      srcImg.width % 2 === 0
-        ? srcImg
-        : Stegassette.cropImg(srcImg, 0, 0, srcImg.width - 1, srcImg.height);
-    const fits = capacity >= total && evenSrc.width >= minWidth;
-    const useB = fits ? nativeB : B;
-    const scaled = fits
-      ? evenSrc
-      : Stegassette.autoScaleImg(srcImg, total, B, null, 3, minWidth);
-    // (entries, srcImg, opts, keyImg) — opts is the THIRD argument here, where
-    // the old vendored core took the key image there. Self-keying, so the same
-    // image is both.
-    const out = Stegassette.encodeContainer(
-      entries,
-      scaled,
-      { ...opts, borderWidth: useB },
-      scaled,
-    );
+  // entries → a stegassette PNG carried by srcImg.
+  //
+  // The sizing lives in the codec's collection layer now — the artwork keeps
+  // its own resolution whenever it already has room for the payload, and is
+  // only resized when it is genuinely too small. This wrapper is just the
+  // browser tail: the layer returns pixels, the page wants a Blob.
+  async function encodeStegassette(entries, srcImg, steg = STEG) {
+    const out = Stegassette.encodeStegassette(entries, srcImg, steg);
     return { blob: await imgToPngBlob(out), width: out.width, height: out.height };
   }
 
@@ -430,7 +353,7 @@ const Album = (() => {
           },
           {
             // Always raw PCM, encrypted or not. A track image is an audio
-            // cartridge wherever it turns up: with the cover it is the
+            // stegassette wherever it turns up: with the cover it is the
             // music, without it the ciphertext plays as the noise it is.
             mimetype: Stegassette.buildAudioMime({
               bits: audio.bits,
@@ -448,7 +371,7 @@ const Album = (() => {
           `hiding ${tr.title} part ${p + 1}/${P}`,
           (t + (p + 1) / P) / tracks.length,
         );
-        const { blob, width, height } = await encodeCartridge(
+        const { blob, width, height } = await encodeStegassette(
           entries,
           carrierImgs.get(cb),
           method,
@@ -509,7 +432,7 @@ const Album = (() => {
         data: new Uint8Array(await coverBlob.arrayBuffer()),
       },
     ];
-    const cover = await encodeCartridge(
+    const cover = await encodeStegassette(
       coverEntries,
       carrierImgs.get(coverBlob) || (await imgFromBlob(coverBlob)),
       method,
@@ -526,7 +449,7 @@ const Album = (() => {
 
   // ---- read --------------------------------------------------
   // Pull the cover and the parts out of a pile of files. Anything that
-  // isn't a cartridge of this album is reported rather than dropped.
+  // isn't a stegassette of this album is reported rather than dropped.
   async function read(fileList, onProgress = () => {}) {
     const files = [...fileList].filter((f) => /\.png$/i.test(f.name));
     let cover = null,
@@ -553,7 +476,7 @@ const Album = (() => {
           const info = JSON.parse(dec.decode(pj.data));
           const payload = entries.find((e) => e.name !== PART_ENTRY);
           // The file is kept so the reveal can re-read the image later
-          // without holding every cartridge's pixels in memory at once.
+          // without holding every stegassette's pixels in memory at once.
           // The decode opts and the payload's position are kept too, so
           // building that reveal doesn't have to decode the container again.
           parts.push({
@@ -724,7 +647,7 @@ const Album = (() => {
   // ---- re-encode without the encryption ----------------------
   // With the cover in hand the plaintext is recoverable, so the images can
   // be made again from the audio itself instead of from ciphertext. The
-  // carrier is the reconstruction pulled back out of the cartridge, so the
+  // carrier is the reconstruction pulled back out of the stegassette, so the
   // artwork survives; the difference is that every data pixel now derives
   // from a real sample. Combines that track amplitude (signed, veil,
   // midpoint) then show the waveform in the picture rather than noise.
@@ -745,7 +668,7 @@ const Album = (() => {
         opts.traversal,
         opts.params || {},
       );
-      // the cover art as recovered from this cartridge, at full size
+      // the cover art as recovered from this stegassette, at full size
       const rec = Stegassette.computeRecon(img, pathIdx, opts);
       const small = Object.assign(document.createElement("canvas"), {
         width: rec.width,
@@ -773,7 +696,7 @@ const Album = (() => {
       for (const k of ["data", "blob", "opts", "payloadAt", "file"])
         delete info[k];
       const audioEntry = entries.find((e) => /^audio\//i.test(e.mimetype));
-      const out = await encodeCartridge(
+      const out = await encodeStegassette(
         [
           {
             mimetype: "application/json",
@@ -896,7 +819,7 @@ const Album = (() => {
     decryptBytes,
     imgFromBlob,
     imgToPngBlob,
-    encodeCartridge,
+    encodeStegassette,
     decodeAudioFile,
     parseLrc,
     lyricAt,

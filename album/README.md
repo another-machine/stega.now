@@ -1,6 +1,6 @@
 # album
 
-Builds and plays **albums** made of stegassette STGC cartridges. Runs entirely
+Builds and plays **albums** made of stegassette STGC stegassettes. Runs entirely
 in the browser — open `album/` from the served repo, no build step.
 
 An album is a folder of PNGs:
@@ -40,13 +40,13 @@ Drop a folder (or pick files). The console sorts them out by type:
 
 Then set album metadata, ownership (who bought the record), audio format,
 **images per track**, the **encoding method**, and **normalization**. Building
-writes the cartridges and offers them individually or as a zip.
+writes the stegassettes and offers them individually or as a zip.
 
 **Encoding method** — any combine, traversal, and keymap the format supports,
 plus the border. The combine decides how much the payload disturbs the
 artwork; the traversal is the order the payload fills the image, and therefore
 the order it develops in on playback. The choice is recorded in `album.json`
-and carried in each cartridge's own header, so playback needs no configuring.
+and carried in each stegassette's own header, so playback needs no configuring.
 
 **Normalization** — `album` applies one shared gain so the loudest moment on
 the record hits the target and the tracks keep their relative loudness;
@@ -87,7 +87,7 @@ there is no telling which occurrence they belong to.
 
 ## Play
 
-Drop the album folder. The player reads every cartridge, finds the cover,
+Drop the album folder. The player reads every stegassette, finds the cover,
 takes the key from it, and shows the album: artwork, metadata, ownership, and
 a track list with the parts it found. Click a track to decrypt and play it;
 the album then plays through.
@@ -110,7 +110,7 @@ Every image in the album is on the shelf at the bottom, and the one being read
 right now is lit. One image per track packs into a single row; several images
 per track get a row each, with the title beside it. Above the shelf, the
 current image **develops as it decodes** — the encoded picture is cleared away
-in the cartridge's own traversal order, exposing the artwork underneath, in
+in the stegassette's own traversal order, exposing the artwork underneath, in
 step with the audio coming out of it. Since each part holds a contiguous
 stretch of time, image 2 of 3 develops during its own third of the song.
 
@@ -139,7 +139,7 @@ stega-now player and it plays it as PCM, music or noise depending.
 An encrypted image's pixels come from ciphertext, which is random, so they
 carry no trace of the music. With the cover loaded the plaintext is in hand,
 so **re-encode from the audio** makes the images again from the samples
-themselves: the carrier is the artwork reconstructed out of the cartridge, and
+themselves: the carrier is the artwork reconstructed out of the stegassette, and
 every data pixel now derives from a real sample. Combines that track amplitude
 show it — under `signed`, pixels moved away from the artwork by an average of
 40.8/255 with ciphertext and 2.2/255 re-encoded, because quiet audio leaves a
@@ -159,7 +159,7 @@ parts are there.
 ## On "encryption"
 
 Possession-based, and worth stating plainly: the AES-GCM key lives in the
-cover cartridge, so tracks are noise without it — you need the original album
+cover stegassette, so tracks are noise without it — you need the original album
 to play the songs. It is **not** protection against someone who has the
 cover; holding the record means holding the key. That is the intent, not a
 DRM claim.
