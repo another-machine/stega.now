@@ -87,16 +87,24 @@ working, their data saved per stegassette and deleted with it.
 
 ---
 
-`lib/stegassette.js` is the codec, vendored from the library that publishes
-it:
+`lib/stegassette.js` and `lib/stegassette-jobs.js` are vendored from
+[@amplib/steganography](https://www.npmjs.com/package/@amplib/steganography),
+which is an ordinary devDependency here. To move to a new codec:
 
-    curl -o lib/stegassette.js https://amplib.app/lib/stegassette.js
+    npm i @amplib/steganography@latest
+    npm run codec
 
-It exposes `window.Stegassette` and comes from
-[@amplib/steganography](https://github.com/another-machine/public-library/tree/main/packages/amplib-steganography),
-built as a self-contained IIFE so these pages stay no-build. `npm run
-codec:check:remote` in the stegassette lab compares this copy against the
-published one and fails on drift.
+`codec` is two `cp`s out of `node_modules`. The version lives in
+`package.json` and the lockfile, so there is nothing to check and no drift to
+detect — which is the whole reason this replaced a script that fetched
+`amplib.app/lib/` and compared hashes. Commit the resulting `lib/` diff.
+
+The copies are committed and served from this origin, so the pages stay
+no-build and depend on nothing at runtime. **Never hand-edit them** — they are
+build output, and `npm run codec` will overwrite anything you change.
+
+The bundles expose `window.Stegassette` and `window.StegassetteJobs`, built as
+self-contained IIFEs. `lib/reveal.js` is this repo's own, not vendored.
 
 The API is not the same as the old vendored `steg-core.js` it replaced:
 `encodeContainer` takes `(entries, srcImg, opts, keyImg)` rather than
