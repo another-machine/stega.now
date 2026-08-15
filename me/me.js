@@ -40,7 +40,7 @@ const Me = (() => {
   const STEG = {
     combine: "signed",
     traversal: "boustrophedon",
-    keyMap: "adjacent",
+    keymap: "adjacent",
     border: 0.02,
     pack: "packed",
   };
@@ -76,9 +76,15 @@ const Me = (() => {
         [0, 0.5, 1, 0.5],
       ],
     },
+    // The photobooth strips. `aspect` is a suggestion, not a constraint — the
+    // frames are still fractions and hold their shape at any shape of picture.
+    // But a strip stacked into a square is three letterbox slices rather than a
+    // strip, so picking one moves the aspect with it and the frames come out
+    // roughly square. Change the aspect afterwards and it stays changed.
     {
       id: "strip3",
-      label: "strip of three",
+      label: "vertical strip of three",
+      aspect: "1:3",
       frames: [
         [0, 0, 1, 1 / 3],
         [0, 1 / 3, 1, 1 / 3],
@@ -87,7 +93,8 @@ const Me = (() => {
     },
     {
       id: "strip4",
-      label: "strip of four",
+      label: "vertical strip of four",
+      aspect: "1:4",
       frames: [
         [0, 0, 1, 0.25],
         [0, 0.25, 1, 0.25],
@@ -157,12 +164,18 @@ const Me = (() => {
       ],
     },
   ];
+  // square, then progressively taller, then landscape. The tall end runs past
+  // what a camera gives you because a stacked strip needs it: four square
+  // frames down a picture is 1:4 and nothing shallower.
   const ASPECTS = [
     { id: "1:1", v: 1 },
     { id: "4:5", v: 4 / 5 },
     { id: "3:4", v: 3 / 4 },
     { id: "2:3", v: 2 / 3 },
     { id: "9:16", v: 9 / 16 },
+    { id: "1:2", v: 1 / 2 },
+    { id: "1:3", v: 1 / 3 },
+    { id: "1:4", v: 1 / 4 },
     { id: "4:3", v: 4 / 3 },
     { id: "3:2", v: 3 / 2 },
     { id: "16:9", v: 16 / 9 },
@@ -298,9 +311,16 @@ const Me = (() => {
 
   // ---- sizing ------------------------------------------------
   // How big the stegassette has to be to hold `bytes` at `bpp` bytes per data
-  // pixel, at the requested aspect. Two floors raise it: `minLong`, because a
-  // short message would otherwise come out as a thumbnail, and `minWidth` —
-  // the width the STGC header itself occupies, below which encoding refuses.
+  // pixel, at the requested aspect — which is the whole of it: the picture is
+  // the size the sound needs, so the sound reaches the last pixel and the
+  // picture develops end to end. There used to be a `minLong` floor here to
+  // keep short messages off thumbnail size, and it is still honoured, but
+  // nothing sets it: a floor above the natural size is exactly how a waveform
+  // ends early, with the pixels past the payload never written and so already
+  // developed before playback starts. Want a bigger picture, ask for more
+  // sound — a higher sample rate or 16-bit buys pixels that carry samples.
+  // `minWidth` is the one real floor: the width the STGC header itself
+  // occupies, below which encoding refuses.
   function planCanvas({
     bytes,
     bpp = 3,
@@ -337,65 +357,16 @@ const Me = (() => {
   }
 
   // ---- the core's moving parts -------------------------------
-  // The codec is now @amplib/steganography itself (lib/stegassette.js), not a
-  // flattened copy of it. This file still uses `keyMap` as its own internal
-  // spelling, so every call into the codec sends BOTH spellings: the package
-  // reads `keymap` and throws if it sees only `keyMap`, which is the loud
-  // failure that replaced the old silent fall-back to `adjacent`.
-  const bothKeymaps = (keyMap) => ({ keyMap, keymap: keyMap });
-
-  // The width below which the header has nowhere to live. Derived from the
-  // packed header when the core won't say: the package's newer layout rides two
-  // border pixels per byte instead of one, but a canvas (header bytes + 2) wide
-  // has room either way — one border row holds the raw-byte layout, and the
-  // ring of a canvas that wide is many times the nibble layout's need.
-  function headerFloor(opts) {
-    if (Stegassette.stgcHeaderWidth)
-      return Stegassette.stgcHeaderWidth({
-        ...opts,
-        ...bothKeymaps(opts.keymap || opts.keyMap || "adjacent"),
-      });
-    const plan = opts.plan;
-    const params = { ...(opts.params || {}) };
-    if ((opts.traversal || "raster") === "fisher-yates" && params.seed == null)
-      params.seed = 0xffffffff; // the widest seed, so this stays a floor
-    // an unrecognised plan is treated as non-default, which only over-estimates
-    const isDefault = Stegassette.isDefaultPlan
-      ? Stegassette.isDefaultPlan(plan)
-      : false;
-    return (
-      Stegassette.packStgcHeader({
-        combine: opts.combine || "xor",
-        ...bothKeymaps(opts.keyMap || "adjacent"),
-        traversal: opts.traversal || "raster",
-        interiorByteLength: 0,
-        entryCount: 0,
-        params,
-        ch:
-          isDefault || (plan && plan.broadcast)
-            ? undefined
-            : Stegassette.serializeChannelPlan(plan.slots),
-        pad: plan ? plan.pad : 0,
-        pack: plan ? plan.pack : "packed",
-      }).length + 2
-    );
-  }
+  // The codec is @amplib/steganography itself (lib/stegassette.js), vendored
+  // and pinned in package.json, so its exports are simply there to be called.
+  // Note the spelling: `keymap`, lowercase m. The package throws on `keyMap`
+  // rather than silently falling back to `adjacent`, so this file uses the
+  // package's spelling throughout and there is nothing to translate.
+  const headerFloor = Stegassette.stgcHeaderWidth;
 
   // The entry table's own size, which is what an aligned channel plan pads
-  // against. The package exports this as entryTableSize; the local fallback is
-  // kept for the case where an older codec is loaded.
-  function tableSize(entries) {
-    if (Stegassette.entryTableSize) return Stegassette.entryTableSize(entries);
-    let n = 0;
-    for (const e of entries)
-      n +=
-        2 +
-        enc.encode(e.mimetype || "application/octet-stream").length +
-        2 +
-        enc.encode(e.name || "").length +
-        4;
-    return n;
-  }
+  // against.
+  const tableSize = Stegassette.entryTableSize;
 
   // What one stegassette is going to cost, before anything is recorded — the
   // estimate line and the real build both go through this.
@@ -421,7 +392,7 @@ const Me = (() => {
       minLong,
       minWidth: headerFloor({
         combine: steg.combine,
-        keyMap: steg.keyMap,
+        keymap: steg.keymap,
         traversal: steg.traversal,
         plan: cplan,
       }),
@@ -587,29 +558,55 @@ const Me = (() => {
   }
 
   // MediaRecorder blobs often report duration Infinity until something has
-  // seeked past the end, which also blocks seeking — so provoke it once.
+  // seeked past the end, which also blocks seeking — so provoke it once. But
+  // never on pain of hanging: a camera take that keeps its duration to itself
+  // resolves NaN after a bound instead, and the caller falls back to the
+  // recording's own clock. A promise that only the browser can resolve is a
+  // promise that sometimes doesn't — and every one of these awaits sits on the
+  // path that fills frames, where "it silently never returns" reads as the
+  // page being broken, with nothing in the console to say why.
   function durationOf(v) {
     if (Number.isFinite(v.duration) && v.duration > 0)
       return Promise.resolve(v.duration);
     return new Promise((res) => {
+      let done = false;
+      const fin = (val) => {
+        if (done) return;
+        done = true;
+        v.removeEventListener("timeupdate", on);
+        res(val);
+      };
       const on = () => {
         if (Number.isFinite(v.duration) && v.duration > 0) {
-          v.removeEventListener("timeupdate", on);
           v.currentTime = 0;
-          res(v.duration);
+          fin(v.duration);
         }
       };
       v.addEventListener("timeupdate", on);
+      setTimeout(() => fin(NaN), 3000);
       v.currentTime = 1e101;
     });
   }
+  // Resolves on `seeked` — or on a timer, because a MediaRecorder take can
+  // refuse a seek (a target past the media's real end, which is exactly where
+  // a duration taken from the recording clock sends the last frame of a
+  // spread) and then `seeked` never comes. The target is also clamped to the
+  // seekable range when the browser will say what that is.
   function seekTo(v, t) {
     return new Promise((res) => {
-      const on = () => {
-        v.removeEventListener("seeked", on);
+      try {
+        const s = v.seekable;
+        if (s && s.length) t = Math.min(t, Math.max(0, s.end(s.length - 1) - 0.001));
+      } catch (_) {}
+      let done = false;
+      const fin = () => {
+        if (done) return;
+        done = true;
+        v.removeEventListener("seeked", fin);
         res();
       };
-      v.addEventListener("seeked", on);
+      v.addEventListener("seeked", fin);
+      setTimeout(fin, 800);
       v.currentTime = t;
     });
   }
@@ -620,8 +617,24 @@ const Me = (() => {
     c.getContext("2d").drawImage(v, 0, 0);
     return c;
   }
+  // `seeked` says the seek landed, not that the frame it landed on has been
+  // handed over for drawing — draw straight away and you can copy the frame
+  // that was already there, which is how a spread comes out as N copies of one
+  // moment. requestVideoFrameCallback fires when the new frame is actually
+  // presented, so it is registered BEFORE the seek (the presentation the seek
+  // causes can otherwise land before anything is listening) and then given a
+  // short window to arrive. Only ever a window: a hidden tab presents no frames
+  // at all, so waiting on it outright would hang every grab.
   async function frameAt(v, t) {
+    const rvfc = typeof v.requestVideoFrameCallback === "function";
+    let shown = false;
+    if (rvfc) v.requestVideoFrameCallback(() => (shown = true));
     await seekTo(v, t);
+    if (rvfc && !document.hidden) {
+      const t0 = performance.now();
+      while (!shown && performance.now() - t0 < 300)
+        await new Promise((r) => setTimeout(r, 16));
+    }
     return still(v);
   }
 
@@ -635,7 +648,7 @@ const Me = (() => {
     audio,
     steg = {},
     normalize = { on: true, db: -1 },
-    minLong = 600,
+    minLong = 0,
     onProgress = () => {},
   }) {
     const method = { ...STEG, ...steg };
@@ -728,7 +741,7 @@ const Me = (() => {
       minLong,
       minWidth: headerFloor({
         combine: method.combine,
-        keyMap: method.keyMap,
+        keymap: method.keymap,
         traversal: method.traversal,
         plan: cplan,
       }),
@@ -760,7 +773,7 @@ const Me = (() => {
       {
         combine: method.combine,
         traversal: method.traversal,
-        ...bothKeymaps(method.keyMap),
+        keymap: method.keymap,
         borderWidth: B,
         params: {},
         plan: cplan,
@@ -789,14 +802,6 @@ const Me = (() => {
   async function read(blob) {
     const img = await imgFromBlob(blob);
     const { entries, opts } = Stegassette.decodeContainer(img, img);
-    // lib/reveal.js — and the player here — read opts.keyMap; a core synced from
-    // @amplib/steganography reports opts.keymap. Carry both, or the reveal
-    // quietly clears the wrong key pixels under `adjacent`.
-    const km = opts.keymap || opts.keyMap;
-    if (km) {
-      opts.keyMap = km;
-      opts.keymap = km;
-    }
     const ie = entries.find((e) => e.name === INFO_ENTRY);
     const ae = entries.find((e) => /^audio\/l/i.test(e.mimetype || ""));
     let info = null;
