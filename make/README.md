@@ -216,7 +216,9 @@ Multiple audio tracks are mixed and loop independently over the primary track's 
 
 ### Traversal orders
 
-`raster` · `boustrophedon` · `spiral` · `angle` · `fisher-yates` · `center-out` · `hilbert` · `polar` · `bayer`
+`raster` · `boustrophedon` · `spiral` · `angle` · `fisher-yates` · `center-out` · `hilbert` · `polar` · `bayer` · `radial`
+
+`radial` is the aspect-normalized version of `center-out`: its expanding front is the ellipse inscribed in the image rather than a circle in pixels. The codec also takes a `direction` for it (`out`/`in`), which the job schema does not carry yet — jobs encode at the default, `out`.
 
 ### Key pixel pairings
 
