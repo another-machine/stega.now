@@ -34,12 +34,12 @@ never going to arrive: every frame filled, and the make button silently
 disabled with nothing on screen saying why. Now there is one choice, and when
 something is still missing the page says which half it is.
 
-**Record yourself**, then scrub the take and grab the moments you want.
-`spread across every frame` takes one frame from each equal share of the
-recording, which fills a layout in a click; grabbing by hand puts a chosen
-moment in a chosen frame, and the aim moves on to the next empty one. At the
-default `one frame` there is nothing to spread across, so that button is not
-there and `grab` reads `grab this moment`.
+**Record yourself**, then scrub the recording and grab the moments you want.
+`fill all frames` takes one frame from each equal share of the recording,
+which fills a layout in a click; grabbing by hand puts a chosen moment in a
+chosen frame, and the target moves on to the next empty one. At the default
+`one frame` there is nothing to fill across, so that button is not there and
+`grab` reads `grab frame`.
 
 A grab waits for the frame it seeked to actually be presented before it copies
 the picture. `seeked` only says the seek landed, and drawing on that alone can
@@ -74,6 +74,31 @@ even if you switch back to `record myself` with it still loaded.
 
 **Images and a message** is the other way round: hand it pictures, record a
 voice message into them. Fewer images than frames repeat around the layout.
+
+## Film
+
+`@amplib/photography` (vendored as `lib/photography.js`, re-vendored by
+`npm run photo`) processes the picture on the GPU. A preset picks a look;
+`settings` opens the full configuration, generated from the package's own
+parameter schema — so a setting that doesn't apply in the current state greys
+out, with the reason in its tooltip. `none` skips the pass entirely, and is
+the only option without WebGL2.
+
+The settings split in two, applied at different times:
+
+- **Motion** (frames, stack, trail) applies when you grab: a grab captures a
+  burst of frames from the video and stacks them into one still — average
+  for motion blur, brightest for light trails. Changing it doesn't touch
+  frames already grabbed; grab or fill again. Supplied images are single
+  frames, so the group is greyed in that mode.
+- Everything else (light, texture, focus, colour) renders live on the whole
+  composed picture, and is applied at full resolution when you make —
+  before the audio is encoded, since moving pixels after encoding would
+  destroy the payload.
+
+The applied settings are recorded in me.json (`picture.film`, plus a
+per-frame `film` on burst grabs), so a stegassette says how its picture was
+made the same way it says how its sound was hidden.
 
 ## Under `sound format, pattern, layout`
 

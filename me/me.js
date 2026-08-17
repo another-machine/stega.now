@@ -638,6 +638,199 @@ const Me = (() => {
     return still(v);
   }
 
+  // ---- the film ----------------------------------------------
+  // @amplib/photography (lib/photography.js), assumed the same way the codec
+  // is. Two halves, split exactly where the package splits them: the burst is
+  // capture-time — frames seeked out of the take and stacked into a still the
+  // moment you grab, baked into the slot — and the develop chain is
+  // picture-time, re-rendered live over the whole composed layout and burned
+  // in at build, before the sound is hidden so the reveal plays the developed
+  // picture back out of its own pixels.
+  //
+  // One Darkroom serves every use in turn (a burst, the preview, the build):
+  // an expose replaces the last one, so whoever exposes last owns it and the
+  // page re-exposes the preview after anything else has used it.
+  let darkroom = null;
+  let darkroomWhy = null;
+  function filmAvailable() {
+    if (darkroom) return true;
+    if (darkroomWhy) return false;
+    try {
+      if (typeof Photography === "undefined")
+        throw new Error("lib/photography.js is not loaded");
+      darkroom = new Photography.Darkroom();
+      return true;
+    } catch (err) {
+      darkroomWhy = err.message || String(err);
+      return false;
+    }
+  }
+  const filmUnavailableWhy = () => darkroomWhy;
+
+  // Presets are overrides on the schema's own defaults, so a dial a preset
+  // has no opinion about follows the package rather than a copy of it. Each
+  // is a full param set *including* the capture half (frames, stack, trail) —
+  // a look is a way of shooting, not just a way of printing.
+  const FILM_PRESETS = [
+    // the page as it was: no darkroom pass at all
+    { id: "none", label: "none", off: true },
+    // the schema's defaults are already a tuned consumer film
+    { id: "standard", label: "standard film", over: {} },
+    {
+      id: "portrait",
+      label: "portrait",
+      over: {
+        frames: 4,
+        trail: 0.3,
+        aperture: 0.5,
+        focalPlane: 0.45,
+        softness: 0.5,
+        halation: 0.4,
+        headroom: 0.45,
+        rolloff: 0.7,
+        black: 0.08,
+        grain: 0.22,
+        drift: 0.2,
+        split: 0.3,
+        shadowHue: 205,
+        highlightHue: 32,
+        vignette: 0.3,
+      },
+    },
+    {
+      id: "trails",
+      label: "light trails",
+      over: {
+        frames: 32,
+        stack: "max",
+        exposure: 0.25,
+        rolloff: 0.45,
+        halation: 0.65,
+        headroom: 0.6,
+        halationHue: 0.12,
+        black: 0.3,
+        grain: 0.4,
+        drift: 0.35,
+        split: 0.3,
+        shadowHue: 228,
+        highlightHue: 40,
+        vignette: 0.4,
+      },
+    },
+    {
+      id: "ghost",
+      label: "ghost",
+      over: {
+        frames: 32,
+        trail: 0.95,
+        exposure: 0.7,
+        rolloff: 0.65,
+        softness: 0.5,
+        halation: 0.25,
+        black: 0.12,
+        grain: 0.3,
+        split: 0.25,
+        shadowHue: 210,
+        highlightHue: 200,
+        vignette: 0.2,
+      },
+    },
+    {
+      id: "midnight",
+      label: "midnight",
+      over: {
+        frames: 8,
+        exposure: -0.4,
+        rolloff: 0.35,
+        halation: 0.2,
+        halationHue: 0.3,
+        black: 0.45,
+        softness: 0.3,
+        grain: 0.5,
+        drift: 0.4,
+        split: 0.6,
+        shadowHue: 222,
+        highlightHue: 210,
+        vignette: 0.45,
+      },
+    },
+  ];
+  function filmPreset(id) {
+    const p = FILM_PRESETS.find((x) => x.id === id);
+    if (!p || p.off) return null;
+    return { ...Photography.defaultParams(), ...p.over };
+  }
+
+  // Every stage in the composite is gated by its own dial, so zeros come out
+  // as the resolved stack alone — which is what lets a burst bake into a slot
+  // without the film look burned in twice.
+  const FILM_NEUTRAL = {
+    trail: 0,
+    exposure: 0,
+    rolloff: 0,
+    halation: 0,
+    headroom: 0,
+    halationHue: 0.5,
+    black: 0,
+    softness: 0,
+    aperture: 0,
+    focalPlane: 0.5,
+    grain: 0,
+    drift: 0,
+    split: 0,
+    shadowHue: 0,
+    highlightHue: 0,
+    vignette: 0,
+  };
+
+  function copyOutDarkroom() {
+    const src = darkroom.canvas;
+    const c = cnvEl(src.width, src.height);
+    c.getContext("2d").drawImage(src, 0, 0);
+    return c;
+  }
+
+  // The frames of one grab: the shutter opens at t and stays open n frames at
+  // the take's nominal rate. Every seek in here is the bounded frameAt, so a
+  // take that refuses a seek degrades into duplicated frames rather than a
+  // hang — and a mean stack of duplicates is just the still.
+  async function burstAt(v, t, n, { fps = 30, onFrame } = {}) {
+    const frames = [];
+    for (let i = 0; i < n; i++) {
+      frames.push(await frameAt(v, t + i / fps));
+      if (onFrame) onFrame(i + 1, n);
+    }
+    return frames;
+  }
+
+  // Stack a burst into one still. Trail is develop-time in the package — the
+  // accumulator keeps both moments — but a slot is a baked canvas, so here it
+  // belongs to the grab: change it and grab again.
+  function stackBurst(frames, { stack = "mean", trail = 0 } = {}) {
+    darkroom.exposeFrames(frames, { frames: frames.length, stack });
+    darkroom.develop({ ...FILM_NEUTRAL, trail: stack === "mean" ? trail : 0 });
+    return copyOutDarkroom();
+  }
+
+  // The composed layout, exposed as the scene the develop dials render. Split
+  // from filmDevelop so a dial drag re-develops without re-exposing — an
+  // expose reseeds the grain, which would shimmer under the pointer.
+  function filmScene(canvas) {
+    darkroom.exposeFrames([canvas], { frames: 1, stack: "mean" });
+  }
+  // Render the held scene with these params. Hands back the darkroom's own
+  // canvas — blit it somewhere, the next expose repaints it.
+  function filmDevelop(params) {
+    darkroom.develop(params);
+    return darkroom.canvas;
+  }
+  // Full-resolution, for the build: scene in, developed copy out.
+  function filmDeveloped(canvas, params) {
+    filmScene(canvas);
+    darkroom.develop(params);
+    return copyOutDarkroom();
+  }
+
   // ---- build -------------------------------------------------
   // audio.channels is float PCM already at audio.rate (decodeAudioBlob).
   async function build({
@@ -647,6 +840,7 @@ const Me = (() => {
     frames = [],
     audio,
     steg = {},
+    film = null,
     normalize = { on: true, db: -1 },
     minLong = 0,
     onProgress = () => {},
@@ -660,7 +854,7 @@ const Me = (() => {
     const chLayout = audio.layout || "planar";
     const aspect = aspectOf(layout.aspect);
 
-    onProgress("laying out the sound", 0.1);
+    onProgress("preparing the audio", 0.1);
     const mixed = audio.channels.map((c) => new Float32Array(c));
     if (normalize.on)
       Stegassette.peakNormalize(mixed, {
@@ -685,11 +879,18 @@ const Me = (() => {
         aspect: layout.aspect || "1:1",
         gap: Number(layout.gap) || 0,
         matte: layout.matte || "#000000",
+        // the whole look, dial by dial — a stegassette should say how its
+        // picture was made the same way it says how its sound was hidden
+        film:
+          film && film.params
+            ? { preset: film.preset || "custom", ...film.params }
+            : null,
         frames: frames.map((f, i) => ({
           slot: i + 1,
           filled: !!(f && f.src),
           mirror: !!(f && f.mirror),
           ...(f && f.t != null ? { t: Math.round(f.t * 1000) / 1000 } : {}),
+          ...(f && f.film ? { film: f.film } : {}),
         })),
       },
       audio: {
@@ -749,10 +950,17 @@ const Me = (() => {
 
     onProgress(`drawing the picture at ${W}×${H}`, 0.3);
     await tick();
-    const cnv = renderLayout(W, H, tpl, frames, {
+    let cnv = renderLayout(W, H, tpl, frames, {
       gap: layout.gap,
       matte: layout.matte,
     });
+    // Developed before the sound goes in, never after — the film pass moves
+    // pixels, and moved pixels after encoding is a destroyed payload.
+    if (film && film.params && filmAvailable()) {
+      onProgress("applying the film", 0.45);
+      await tick();
+      cnv = filmDeveloped(cnv, film.params);
+    }
     const carrier = new Stegassette.Img(
       W,
       H,
@@ -762,7 +970,7 @@ const Me = (() => {
       ),
     );
 
-    onProgress("hiding the sound in it", 0.55);
+    onProgress("hiding the audio", 0.55);
     await tick();
     // (entries, srcImg, opts, keyImg) — opts is the THIRD argument here, where
     // the old vendored core took the key image there. Self-keying, so the same
@@ -857,6 +1065,14 @@ const Me = (() => {
     seekTo,
     still,
     frameAt,
+    FILM_PRESETS,
+    filmAvailable,
+    filmUnavailableWhy,
+    filmPreset,
+    burstAt,
+    stackBurst,
+    filmScene,
+    filmDevelop,
     build,
     read,
     audioOf,

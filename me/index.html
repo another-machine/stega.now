@@ -44,6 +44,33 @@
         inline-size: 4.5rem;
       }
 
+      /* the darkroom dials: the schema's groups, each a run of range fields.
+         The slider takes the width the label and readout leave; an inert dial
+         (the schema says why in the row's title) dims rather than disappears,
+         so the shape of the panel never jumps. */
+      #dials {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-flow);
+      }
+      #dials fieldset {
+        margin: 0;
+        width: 100%;
+      }
+      #dials .field input[type="range"] {
+        flex: 1 1 8rem;
+        min-inline-size: 6rem;
+      }
+      #dials .field output {
+        inline-size: 3.5rem;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      #dials .field.inert label,
+      #dials .field.inert output {
+        opacity: 0.45;
+      }
+
       /* the settings that have a defensible default, folded away */
       details.more {
         width: 100%;
@@ -174,25 +201,25 @@
            going to exist, and the make button just sat there disabled. These
            are the three pairings that mean something. -->
       <fieldset>
-        <legend>the picture and the sound</legend>
+        <legend>picture and sound</legend>
         <div class="ht-arrange-stack">
           <label class="ht-arrange-inline"
             ><input type="radio" name="mode" value="record" checked /> record
             myself
             <span class="ht-type-small u-dim"
-              >— frames out of the take, with its own voice</span
+              >— frames from the recording, with its audio</span
             ></label
           >
           <label class="ht-arrange-inline"
             ><input type="radio" name="mode" value="images" /> images I have
             <span class="ht-type-small u-dim"
-              >— with a message I record into them</span
+              >— with a recorded voice message</span
             ></label
           >
           <label class="ht-arrange-inline"
             ><input type="radio" name="mode" value="file" /> a video file
             <span class="ht-type-small u-dim"
-              >— frames out of it, with its own sound</span
+              >— frames from the video, with its audio</span
             ></label
           >
         </div>
@@ -200,10 +227,10 @@
 
       <!-- ── record myself ───────────────────────────────── -->
       <fieldset id="boxRecord">
-        <legend>the take</legend>
+        <legend>recording</legend>
         <div class="ht-arrange-stack">
           <div class="ht-arrange-row">
-            <button id="camStart">start the camera</button>
+            <button id="camStart">start camera</button>
             <button id="recStart" disabled>record</button>
             <button id="recStop" hidden>stop</button>
             <label class="ht-arrange-inline u-dim"
@@ -224,7 +251,7 @@
 
       <!-- ── images I have ───────────────────────────────── -->
       <fieldset id="boxImages" hidden>
-        <legend>the images, and the message</legend>
+        <legend>images and message</legend>
         <div class="ht-arrange-stack">
           <div class="drop" id="imgDrop">
             <span class="drop__label">drop images here</span>
@@ -237,7 +264,7 @@
           </div>
           <div class="ht-type-small" id="imgStatus"></div>
           <div class="ht-arrange-row">
-            <button id="msgStart">record a message</button>
+            <button id="msgStart">record message</button>
             <button id="msgStop" hidden>stop</button>
             <progress
               id="msgLevel"
@@ -253,17 +280,16 @@
 
       <!-- ── a video file ────────────────────────────────── -->
       <fieldset id="boxFile" hidden>
-        <legend>the video file</legend>
+        <legend>video file</legend>
         <div class="ht-arrange-stack">
           <div class="ht-arrange-row">
             <input type="file" id="vidFile" accept="video/*" hidden />
-            <button type="button" id="vidPick">choose a video file</button>
+            <button type="button" id="vidPick">choose video file</button>
             <span id="fileStatus" class="u-dim"></span>
           </div>
           <div class="ht-type-small">
-            its own audio comes back out of it with the browser's decoder — if
-            the browser refuses that container, making it says so rather than
-            going quiet
+            the file's audio is decoded by the browser — unsupported formats
+            show an error when you make
           </div>
         </div>
       </fieldset>
@@ -279,7 +305,7 @@
         </div>
         <div class="ht-arrange-row">
           <button id="grab">grab into frame 1</button>
-          <button id="spread">spread across every frame</button>
+          <button id="spread">fill all frames</button>
         </div>
       </div>
 
@@ -288,8 +314,30 @@
       <div class="stage" id="stage"></div>
       <div class="ht-type-small" id="slotHint"></div>
 
+      <!-- the film: a preset on top, full configuration under the fold. The
+           controls are generated from the package's own schema, so a setting
+           that doesn't apply in the current state (trail under a brightest
+           stack, focus with the aperture closed, the motion group when the
+           frames are supplied images) greys itself and the row's title says
+           why. -->
+      <fieldset id="boxFilm">
+        <legend>film</legend>
+        <div class="ht-arrange-stack">
+          <div class="fieldset-stack">
+            <div class="field">
+              <label for="film">preset</label><select id="film"></select>
+            </div>
+          </div>
+          <div class="ht-type-small u-dim" id="filmHint"></div>
+          <details class="more" id="darkroomBox">
+            <summary class="ht-type-small">settings</summary>
+            <div id="dials"></div>
+          </details>
+        </div>
+      </fieldset>
+
       <fieldset>
-        <legend>whose it is</legend>
+        <legend>details</legend>
         <div class="fieldset-stack">
           <div class="field">
             <label for="nFrom">from</label><input id="nFrom" placeholder="me" />
@@ -304,7 +352,7 @@
       </fieldset>
 
       <div class="ht-arrange-row">
-        <button id="makeBtn" disabled>make the stegassette</button>
+        <button id="makeBtn" disabled>make stegassette</button>
         <progress id="mprog" class="u-inline" value="0" max="1" hidden></progress>
         <span id="mstatus" class="u-dim"></span>
       </div>
@@ -318,7 +366,7 @@
         <summary class="ht-type-small">sound format, pattern, layout</summary>
         <div>
           <fieldset>
-            <legend>the layout</legend>
+            <legend>layout</legend>
             <div class="fieldset-stack">
               <div class="field">
                 <label for="tpl">template</label><select id="tpl"></select>
@@ -344,14 +392,13 @@
               </div>
             </div>
             <div class="ht-type-small">
-              the picture is exactly the size the sound needs, so it develops
-              end to end — `sample rate` and `bit depth` are what make it
-              bigger
+              picture size is set by the audio — sample rate and bit depth
+              change it
             </div>
           </fieldset>
 
           <fieldset>
-            <legend>the sound</legend>
+            <legend>sound</legend>
             <div class="fieldset-stack">
               <div class="field">
                 <label for="aBits">bit depth</label>
@@ -390,7 +437,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>the pattern</legend>
+            <legend>pattern</legend>
             <div class="ht-arrange-stack">
               <div class="fieldset-stack">
                 <div class="field">
@@ -417,12 +464,11 @@
                 </div>
               </div>
               <div class="ht-arrange-row">
-                <button id="sRandom">surprise me</button>
+                <button id="sRandom">randomize</button>
               </div>
               <div class="ht-type-small">
-                combine decides how much the voice disturbs the picture ·
-                traversal is the order it fills, and the order it develops in as
-                it plays
+                combine sets how much the audio changes the picture · traversal
+                sets the fill and playback order
               </div>
             </div>
           </fieldset>
@@ -435,8 +481,8 @@
       <div class="drop" id="pdrop">
         <span class="drop__label">drop a stegassette PNG here</span>
         <span class="drop__sub"
-          >any STGC stegassette with a PCM entry plays here — a stega-me one also
-          shows who it is from</span
+          >any STGC stegassette with audio plays here — stega-me ones also show
+          who they are from</span
         >
         <input type="file" id="pfiles" accept="image/png" multiple hidden />
         <button type="button" id="ppick">choose files</button>
@@ -458,6 +504,7 @@
     </section>
 
     <script src="../lib/stegassette.js"></script>
+    <script src="../lib/photography.js"></script>
     <script src="../lib/reveal.js"></script>
     <script src="me.js"></script>
     <script>
@@ -534,6 +581,156 @@
           })
           .join("");
       }
+
+      // ═══ THE FILM ══════════════════════════════════════════
+      // filmParams is the whole of the state: null is "untouched" (no
+      // darkroom pass anywhere), otherwise a full param set — capture half
+      // included — that the dials read and write. The preset menu writes all
+      // of it at once; a dial writes one key and the menu flips to "custom".
+      let filmParams = null;
+      let stageView = null; // the canvas in the stage, for live re-develops
+      const FPS = 30; // the take's nominal rate; a burst seeks at it
+
+      const filmOK = () => Me.filmAvailable();
+      const DIALS = filmOK()
+        ? [...Photography.EXPOSURE_SCHEMA, ...Photography.DEVELOP_SCHEMA]
+        : [];
+
+      $("film").innerHTML =
+        Me.FILM_PRESETS.map(
+          (p) => `<option value="${p.id}">${p.label}</option>`,
+        ).join("") + `<option value="custom" hidden>custom</option>`;
+
+      function setPreset(id) {
+        $("film").value = id;
+        filmParams = filmOK() ? Me.filmPreset(id) : null;
+        syncDials();
+        drawStage();
+      }
+      $("film").addEventListener("change", () => setPreset($("film").value));
+      const toCustom = () => {
+        if ($("film").value !== "custom") $("film").value = "custom";
+      };
+
+      // The dials come out of the package's own schema — ranges, labels,
+      // groups, and the reasons a dial goes inert all live there, not here.
+      function buildDials() {
+        if (!filmOK()) {
+          $("film").disabled = true;
+          $("darkroomBox").hidden = true;
+          $("filmHint").textContent =
+            "film requires WebGL2 — " + (Me.filmUnavailableWhy() || "");
+          return;
+        }
+        const groups = new Map();
+        for (const def of DIALS) {
+          const g = def.group || "Motion";
+          if (!groups.has(g)) groups.set(g, []);
+          groups.get(g).push(def);
+        }
+        for (const [name, defs] of groups) {
+          const fs = document.createElement("fieldset");
+          const legend = document.createElement("legend");
+          legend.textContent = name.toLowerCase();
+          const stack = document.createElement("div");
+          stack.className = "fieldset-stack";
+          fs.append(legend, stack);
+          for (const def of defs) {
+            const row = document.createElement("div");
+            row.className = "field";
+            row.innerHTML =
+              `<label for="dial-${def.key}">${def.label.toLowerCase()}</label>` +
+              `<input type="range" id="dial-${def.key}" min="${def.min}" max="${def.max}" step="${def.step}">` +
+              `<output id="dialv-${def.key}"></output>`;
+            stack.append(row);
+            row.querySelector("input").addEventListener("input", (e) => {
+              if (!filmParams) return;
+              filmParams[def.key] = parseFloat(e.target.value);
+              toCustom();
+              syncDials();
+              redevelop();
+            });
+            // the stack mode rides with the frames dial — capture-time both
+            if (def.key === "frames") {
+              const sr = document.createElement("div");
+              sr.className = "field";
+              sr.innerHTML =
+                `<label for="dial-stack">stack</label>` +
+                `<select id="dial-stack">` +
+                `<option value="mean">average (motion blur)</option>` +
+                `<option value="max">brightest (light trails)</option>` +
+                `</select>`;
+              stack.append(sr);
+              sr.querySelector("select").addEventListener("change", (e) => {
+                if (!filmParams) return;
+                filmParams.stack = e.target.value;
+                toCustom();
+                syncDials();
+              });
+            }
+          }
+          $("dials").append(fs);
+        }
+      }
+
+      // capture-time dials: baked into a slot when you grab, not live
+      const GRAB_TIME = new Set(["frames", "trail"]);
+
+      function syncDials() {
+        if (!filmOK()) return;
+        const on = !!filmParams;
+        for (const def of DIALS) {
+          const input = $("dial-" + def.key);
+          const row = input.closest(".field");
+          const v = on ? filmParams[def.key] : def.value;
+          input.value = v;
+          $("dialv-" + def.key).textContent = Photography.formatParam(def, v);
+          let why = null;
+          if (!on) why = "film is off";
+          else if (GRAB_TIME.has(def.key) && !mode().grabs)
+            why = "video modes only — images are single frames";
+          else why = Photography.inertReason(def, filmParams);
+          input.disabled = !!why;
+          row.classList.toggle("inert", !!why);
+          row.title = why || "";
+        }
+        const st = $("dial-stack");
+        if (st) {
+          st.value = on ? filmParams.stack : "mean";
+          const why = !on
+            ? "film is off"
+            : !mode().grabs
+              ? "video modes only — images are single frames"
+              : null;
+          st.disabled = !!why;
+          st.closest(".field").classList.toggle("inert", !!why);
+          st.closest(".field").title = why || "";
+        }
+        $("filmHint").textContent = !on
+          ? "no film processing"
+          : mode().grabs
+            ? "motion applies when you grab — regrab to change it · everything else updates live"
+            : "settings update live on the picture";
+      }
+
+      // A dial drag re-develops the scene the stage already holds — no
+      // recompose, no re-expose, so the grain sits still under the pointer.
+      function redevelop() {
+        if (!stageView || !filmParams || !filmOK()) return;
+        stageView
+          .getContext("2d")
+          .drawImage(Me.filmDevelop(filmParams), 0, 0);
+      }
+
+      const burstN = () =>
+        filmParams && filmOK() && mode().grabs
+          ? Math.max(1, Math.round(filmParams.frames))
+          : 1;
+      const burstInfo = () => ({
+        frames: Math.round(filmParams.frames),
+        stack: filmParams.stack,
+        ...(filmParams.stack === "mean" ? { trail: filmParams.trail } : {}),
+      });
 
       const stegChoice = () => ({
         combine: $("sCombine").value,
@@ -643,15 +840,27 @@
         const lay = layoutChoice();
         // the same pixel gap renderLayout is about to use, for the overlay
         const g = Math.max(0, Number(lay.gap) || 0) * Math.min(W, H);
-        const cnv = Me.renderLayout(W, H, tpl, slots, {
+        const base = Me.renderLayout(W, H, tpl, slots, {
           gap: lay.gap,
           matte: lay.matte,
         });
+        // with the film on, the stage shows the developed picture: the raw
+        // compose becomes the darkroom's scene and the visible canvas is a
+        // blit target the dials keep re-developing into
+        let cnv = base;
+        if (filmParams && filmOK()) {
+          Me.filmScene(base);
+          cnv = document.createElement("canvas");
+          cnv.width = base.width;
+          cnv.height = base.height;
+        }
         const stage = $("stage");
         const grabs = mode().grabs;
         stage.innerHTML = "";
         stage.className = "stage" + (grabs ? "" : " noaim");
         stage.append(cnv);
+        stageView = cnv;
+        if (cnv !== base) redevelop();
         tpl.frames.forEach((r, i) => {
           const b = document.createElement("button");
           b.className =
@@ -669,7 +878,7 @@
           b.style.height = (Math.max(0, r[3] * H - g) / H) * 100 + "%";
           b.textContent = String(i + 1);
           if (grabs) {
-            b.title = "aim the next grab at frame " + (i + 1);
+            b.title = "target frame " + (i + 1);
             b.addEventListener("click", () => {
               aimed = i;
               drawStage();
@@ -683,18 +892,18 @@
         // that is just a grab, and `grab` is already there
         $("spread").hidden = slots.length < 2;
         $("grab").textContent =
-          slots.length < 2 ? "grab this moment" : "grab into frame " + (aimed + 1);
+          slots.length < 2 ? "grab frame" : "grab into frame " + (aimed + 1);
         // with one frame there is nothing to aim at and nothing to repeat
         // around, so the hint is just whether it is filled
         $("slotHint").textContent =
           slots.length < 2
             ? filled()
-              ? "the frame is filled"
-              : "the frame is empty"
+              ? "frame filled"
+              : "frame empty"
             : `${filled()}/${slots.length} frames filled` +
               (grabs
-                ? " · click one to aim the next grab at it"
-                : " · images repeat around the layout");
+                ? " · click a frame to target the next grab"
+                : " · images repeat across frames");
         const why = missing();
         $("makeBtn").disabled = !!why;
         $("makeBtn").title = why || "";
@@ -772,6 +981,7 @@
         $("take").classList.toggle("mir", mirrorOn());
         $("live").classList.toggle("mir", $("mirror").checked);
         showSound();
+        syncDials(); // the motion dials only mean something when grabs do
         drawStage();
       }
       for (const r of document.querySelectorAll('input[name="mode"]'))
@@ -800,7 +1010,7 @@
           stopCamMeter = null;
           $("live").hidden = true;
           $("camLevel").hidden = true;
-          $("camStart").textContent = "start the camera";
+          $("camStart").textContent = "start camera";
           $("recStart").disabled = true;
           return;
         }
@@ -815,7 +1025,7 @@
         live.hidden = false;
         live.classList.toggle("mir", $("mirror").checked);
         await live.play().catch(() => {});
-        $("camStart").textContent = "stop the camera";
+        $("camStart").textContent = "stop camera";
         $("recStart").disabled = false;
         $("camStatus").textContent = "";
         $("camLevel").hidden = false;
@@ -870,7 +1080,7 @@
         });
         const dur = await Me.durationOf(v);
         take.seconds = Number.isFinite(dur) && dur > 0 ? dur : seconds || 0;
-        statusEl.textContent = "a take of " + Me.fmtTime(take.seconds);
+        statusEl.textContent = "recorded " + Me.fmtTime(take.seconds);
         showSound();
         await spread();
         showScrub();
@@ -893,27 +1103,73 @@
         await Me.seekTo($("take"), (+$("scrub").value / 1000) * take.seconds);
         showScrub();
       });
-      $("grab").addEventListener("click", () => {
-        if (!take) return;
+      // Bursts seek, and two seek loops interleaved on one video fill every
+      // frame with the same wrong moments — so grabs take turns, and the
+      // buttons say so rather than queueing clicks.
+      let grabbing = false;
+      function grabLock(on) {
+        grabbing = on;
+        $("grab").disabled = on;
+        $("spread").disabled = on;
+      }
+
+      $("grab").addEventListener("click", async () => {
+        if (!take || grabbing) return;
         const v = $("take");
-        putFrame(aimed, Me.still(v), v.currentTime, mirrorOn());
+        const n = burstN();
+        if (n > 1) {
+          grabLock(true);
+          const t0 = v.currentTime;
+          try {
+            const shot = await Me.burstAt(v, t0, n, {
+              fps: FPS,
+              onFrame: (k) =>
+                ($("slotHint").textContent = `capturing ${k}/${n}`),
+            });
+            putFrame(aimed, Me.stackBurst(shot, filmParams), t0, mirrorOn());
+            slots[aimed].film = burstInfo();
+          } finally {
+            grabLock(false);
+          }
+        } else {
+          putFrame(aimed, Me.still(v), v.currentTime, mirrorOn());
+        }
         slots[aimed].fromTake = true;
         advance();
         drawStage();
+        showScrub();
       });
       $("spread").addEventListener("click", () => spread());
 
       // one click that fills the whole layout: a frame from each equal share
-      // of the take, in order
+      // of the take, in order — a whole burst per frame when the film asks
+      // for motion
       async function spread() {
-        if (!take || !take.seconds) return;
+        if (!take || !take.seconds || grabbing) return;
         syncSlots();
         const v = $("take");
         const n = slots.length;
-        for (let i = 0; i < n; i++) {
-          const t = ((i + 0.5) / n) * take.seconds;
-          putFrame(i, await Me.frameAt(v, t), t, mirrorOn());
-          slots[i].fromTake = true;
+        const b = burstN();
+        grabLock(true);
+        try {
+          for (let i = 0; i < n; i++) {
+            const t = ((i + 0.5) / n) * take.seconds;
+            if (b > 1) {
+              const shot = await Me.burstAt(v, t, b, {
+                fps: FPS,
+                onFrame: (k) =>
+                  ($("slotHint").textContent =
+                    `frame ${i + 1}/${n} — capturing ${k}/${b}`),
+              });
+              putFrame(i, Me.stackBurst(shot, filmParams), t, mirrorOn());
+              slots[i].film = burstInfo();
+            } else {
+              putFrame(i, await Me.frameAt(v, t), t, mirrorOn());
+            }
+            slots[i].fromTake = true;
+          }
+        } finally {
+          grabLock(false);
         }
         aimed = 0;
         drawStage();
@@ -979,7 +1235,7 @@
         Me.closeStream(msgStream);
         msgStream = null;
         msg = { audioBlob: t.audioBlob, seconds: t.ms / 1000 };
-        $("msgStatus").textContent = "a message of " + Me.fmtTime(msg.seconds);
+        $("msgStatus").textContent = "recorded " + Me.fmtTime(msg.seconds);
         showSound();
         drawStage();
       });
@@ -1011,10 +1267,10 @@
           `${Me.fmtTime(secs)} of sound · ${a.bits}-bit ${a.rate} Hz → ` +
           `${p.W}×${p.H} px` +
           (full
-            ? `, developing end to end`
+            ? `, develops end to end`
             : ` · the sound fills ${Math.round(p.fill * 100)}% of it — that is` +
-              ` the smallest a stegassette can be, so only a longer take, a` +
-              ` higher rate or 16-bit fills the rest`);
+              ` the minimum size; more audio, a higher rate or 16-bit fills` +
+              ` the rest`);
       }
       for (const id of [
         "aBits",
@@ -1051,9 +1307,9 @@
             decoded = await Me.decodeAudioBlob(src, a.rate, a.channels);
           } catch (err) {
             throw new Error(
-              "this browser wouldn't decode that audio (" +
+              "couldn't decode that audio (" +
                 (err.message || err.name) +
-                ") — record it here instead of supplying a file",
+                ") — try recording instead",
             );
           }
           const out = await Me.build({
@@ -1073,6 +1329,9 @@
               source: mode().source,
             },
             steg: stegChoice(),
+            film: filmParams
+              ? { preset: $("film").value, params: { ...filmParams } }
+              : null,
             normalize: normChoice(),
             onProgress: (m, p) => {
               $("mstatus").textContent = m;
@@ -1099,8 +1358,13 @@
         }
         $("mprog").hidden = true;
         $("makeBtn").disabled = !!missing();
+        // the build developed at full resolution in the same darkroom the
+        // stage previews from — redraw so the preview owns the scene again
+        drawStage();
       });
 
+      buildDials();
+      setPreset(filmOK() ? "standard" : "none");
       applyMode();
 
       // ═══ PLAY ══════════════════════════════════════════════
@@ -1131,7 +1395,7 @@
         $("pstatus").textContent = "reading " + (name || "the stegassette");
         try {
           const c = await Me.read(blob);
-          if (!c.audioEntry) throw new Error("no sound in this one");
+          if (!c.audioEntry) throw new Error("no audio in this file");
           pAudio = Me.audioOf(c.audioEntry);
           pDur = pAudio.seconds;
           prev = Reveal.build(c.img, c.opts, c.audioEntry);
@@ -1150,6 +1414,15 @@
                   `${i.picture.template} · ${i.picture.aspect} · ` +
                     `${i.picture.frames.filter((f) => f.filled).length} frames`,
                 ],
+                ...(i.picture.film
+                  ? [
+                      [
+                        "film",
+                        `${i.picture.film.preset} · ${i.picture.film.stack} × ` +
+                          `${i.picture.film.frames}f`,
+                      ],
+                    ]
+                  : []),
                 [
                   "sound",
                   `${i.audio.bits}-bit ${i.audio.rate} Hz × ${i.audio.channels}ch · ` +
@@ -1159,7 +1432,7 @@
                 .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
                 .join("") +
               `</table>`
-            : `<div class="ht-type-small">not a stega-me stegassette — playing its sound anyway</div>`;
+            : `<div class="ht-type-small">not a stega-me file — playing the audio anyway</div>`;
           $("pMethod").textContent =
             `${c.opts.combine} / ${c.opts.traversal} / ${c.opts.keymap}` +
             (c.opts.pack !== "packed" ? " / " + c.opts.pack : "") +

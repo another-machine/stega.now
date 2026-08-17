@@ -108,11 +108,14 @@ Two patterns:
   Commit the resulting `lib/` diff. `css` and `detect` do the same for
   `@amplib/ui` and `@amplib/music-detection`.
 
-- **From a sibling checkout** (`vocoder`): the package hasn't shipped the
-  needed build to npm yet, so the script copies out of
+- **From a sibling checkout** (`vocoder`, `photo`): the package hasn't shipped
+  the needed build to npm yet, so the script copies out of
   `../public-library/packages/` and nothing records a version. The committed
   output means the site never depends on that checkout existing — only
-  re-vendoring does. It becomes the npm pattern the day its package ships.
+  re-vendoring does. It becomes the npm pattern the day its package ships —
+  for `photo` that means an `@amplib/photography` release that includes
+  `dist/photography.global.js` (the build exists in the package source; 0.1.0
+  on npm predates it).
 
 The codec bundles expose `window.Stegassette` and `window.StegassetteJobs`,
 built as self-contained IIFEs. The API is not the same as the old vendored
