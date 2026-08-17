@@ -1,7 +1,7 @@
 # stega-now
 
-Playback for STGC stegassette PNGs. Static — `home/index.html` +
-`lib/stegassette.js`, serve anywhere.
+Playback for STGC stegassette PNGs. Static, no build — every page serves
+as-is from this repo.
 
 `/` is an index of everything here. The player used to be at `/` and moved to
 `/home` — but encoded stegassettes and shared `?src=<url>` links still point at
@@ -90,41 +90,33 @@ working, their data saved per stegassette and deleted with it.
 
 ---
 
-`lib/stegassette.js` and `lib/stegassette-jobs.js` are vendored from
-[@amplib/steganography](https://www.npmjs.com/package/@amplib/steganography),
-which is an ordinary devDependency here. To move to a new codec:
+Everything in `lib/` except `reveal.js` is vendored build output. **Never
+hand-edit those files** — re-vendoring overwrites them. The package.json
+scripts are the inventory of what comes from where; each is a `cp` plus a
+sourcemap-line strip, and the copies are committed, so the pages stay
+no-build and depend on nothing at runtime.
 
-    npm i @amplib/steganography@latest
-    npm run codec
+Two patterns:
 
-`codec` is two `cp`s out of `node_modules`. The version lives in
-`package.json` and the lockfile, so there is nothing to check and no drift to
-detect — which is the whole reason this replaced a script that fetched
-`amplib.app/lib/` and compared hashes. Commit the resulting `lib/` diff.
+- **From npm** (`codec`, `css`): the package is a devDependency, so the
+  version lives in `package.json` and the lockfile and there is no drift to
+  detect. Moving to a new release:
 
-The copies are committed and served from this origin, so the pages stay
-no-build and depend on nothing at runtime. **Never hand-edit them** — they are
-build output, and `npm run codec` will overwrite anything you change.
+      npm i @amplib/steganography@latest
+      npm run codec
 
-The bundles expose `window.Stegassette` and `window.StegassetteJobs`, built as
-self-contained IIFEs. `lib/reveal.js` is this repo's own, not vendored.
+  Commit the resulting `lib/` diff. `css` does the same for `@amplib/ui`.
 
-`lib/sound-transformation.js` (`window.SoundTransformationLib`) and
-`lib/phase-vocoder-processor.js` are vendored the same way, from
-[@amplib/sound-transformation](https://github.com/another-machine/public-library/tree/main/packages/amplib-sound-transformation),
-and drive [mix](mix/)'s beat and key matching. They are committed build output
-under the same never-hand-edit rule:
+- **From a sibling checkout** (`vocoder`, `detect`): the package hasn't
+  shipped the needed build to npm yet, so the script copies out of
+  `../public-library/packages/` and nothing records a version. The committed
+  output means the site never depends on that checkout existing — only
+  re-vendoring does. Each of these becomes the npm pattern the day its
+  package ships.
 
-    npm run vocoder
-
-That package is **not on npm yet**, so unlike `codec` this copies from a sibling
-`../public-library` checkout rather than from `node_modules` — which is why it
-is not a devDependency here. The output is committed, so the site never depends
-on that checkout existing; only re-vendoring does. When the package ships this
-becomes an `npm i` and the same two `cp`s.
-
-The API is not the same as the old vendored `steg-core.js` it replaced:
-`encodeContainer` takes `(entries, srcImg, opts, keyImg)` rather than
-`(entries, srcImg, keyImg, opts)`, and the keymap option is spelled
-`keymap`, not `keyMap` — the package throws on the old spelling rather
-than silently encoding with `adjacent`.
+The codec bundles expose `window.Stegassette` and `window.StegassetteJobs`,
+built as self-contained IIFEs. The API is not the same as the old vendored
+`steg-core.js` they replaced: `encodeContainer` takes
+`(entries, srcImg, opts, keyImg)` rather than `(entries, srcImg, keyImg,
+opts)`, and the keymap option is spelled `keymap`, not `keyMap` — the package
+throws on the old spelling rather than silently encoding with `adjacent`.
