@@ -84,6 +84,9 @@ working, their data saved per stegassette and deleted with it.
 - [me](me/) — a stegassette of you: record yourself, lay frames out in a
   template, and hide the recording's own audio in the picture — or record a
   message into images you already have.
+- [mix](mix/) — loops that know what they are. Makes stegassettes carrying a
+  seamless loop plus its tempo, key, and downbeat position, and plays any
+  number of them together, beat- and key-matched.
 
 ---
 
@@ -105,6 +108,20 @@ build output, and `npm run codec` will overwrite anything you change.
 
 The bundles expose `window.Stegassette` and `window.StegassetteJobs`, built as
 self-contained IIFEs. `lib/reveal.js` is this repo's own, not vendored.
+
+`lib/sound-transformation.js` (`window.SoundTransformationLib`) and
+`lib/phase-vocoder-processor.js` are vendored the same way, from
+[@amplib/sound-transformation](https://github.com/another-machine/public-library/tree/main/packages/amplib-sound-transformation),
+and drive [mix](mix/)'s beat and key matching. They are committed build output
+under the same never-hand-edit rule:
+
+    npm run vocoder
+
+That package is **not on npm yet**, so unlike `codec` this copies from a sibling
+`../public-library` checkout rather than from `node_modules` — which is why it
+is not a devDependency here. The output is committed, so the site never depends
+on that checkout existing; only re-vendoring does. When the package ships this
+becomes an `npm i` and the same two `cp`s.
 
 The API is not the same as the old vendored `steg-core.js` it replaced:
 `encodeContainer` takes `(entries, srcImg, opts, keyImg)` rather than
