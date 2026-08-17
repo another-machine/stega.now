@@ -3,6 +3,7 @@
 edited index.html or lib/*.js can keep being served from the browser cache —
 which looks exactly like a change that didn't work. This one says no-store."""
 
+import os
 import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
@@ -16,6 +17,8 @@ class NoCache(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8123
+    # PORT is how the harness hands out a free one when 8123 is already taken
+    # by another session's server. An explicit argument still wins.
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8123))
     print(f"serving {sys.argv[0]}'s directory on http://127.0.0.1:{port} (no-store)")
     HTTPServer(("127.0.0.1", port), NoCache).serve_forever()
