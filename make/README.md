@@ -210,19 +210,16 @@ Options (applied to every job in batch mode):
 
 Multiple audio tracks are mixed and loop independently over the primary track's cycle, exactly as in the player. The reveal itself comes from the same shared code the player uses (`StegCore.computeRecon` + `computeRevealOrder`), so the video matches what you see in the browser. `video-batch.js` imports `renderVideo()` from `render-video.js`, so the single and batch paths are the same renderer.
 
-### Combine ops
+### Combine, traversal and keymap names
 
-`xor` · `additive` · `subtractive` · `midpoint` · `difference` · `bitshift` · `noise` · `echo` · `signed` · `veil` · `whisper`
-
-### Traversal orders
-
-`raster` · `boustrophedon` · `spiral` · `angle` · `fisher-yates` · `center-out` · `hilbert` · `polar` · `bayer` · `radial`
-
-`radial` is the aspect-normalized version of `center-out`: its expanding front is the ellipse inscribed in the image rather than a circle in pixels. The codec also takes a `direction` for it (`out`/`in`), which the job schema does not carry yet — jobs encode at the default, `out`.
-
-### Key pixel pairings
-
-`adjacent` · `poles` · `mirror-x` · `mirror-y` · `offset` · `rotate`
+The editor builds its option lists from `StegassetteJobs.ENUMS` at load, so
+the selects offer exactly what the codec ships and this README does not keep
+a copy. One thing a name alone doesn't say: `radial` is the aspect-normalized
+version of `center-out` — its expanding front is the ellipse inscribed in the
+image rather than a circle in pixels — and it takes a `direction`, `out` or
+`in`. A `spiral` takes a `rotation`, and every traversal takes a `fit`:
+`compact` packs the data rectangle, `shape` sizes the canvas to the
+traversal's own boundary.
 
 ## STGC format
 

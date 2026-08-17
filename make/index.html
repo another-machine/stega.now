@@ -869,42 +869,30 @@
           <div class="sg-hdr ht-type-eyebrow">steg</div>
           <div class="field">
             <label>traversal</label>
-            <select id="eTraversal">
-              <option>raster</option>
-              <option>boustrophedon</option>
-              <option>spiral</option>
-              <option>angle</option>
-              <option>fisher-yates</option>
-              <option>center-out</option>
-              <option>hilbert</option>
-              <option>polar</option>
-              <option>bayer</option>
-              <option>radial</option>
-            </select>
+            <!-- options for traversal, keymap and fit come from
+                 StegassetteJobs.ENUMS at init — the schema's own lists, so a
+                 new name ships here the day the codec does -->
+            <select id="eTraversal"></select>
             <span
               id="travParams"
               style="display: none; align-items: center; gap: 4px"
             ></span>
           </div>
           <div class="field">
+            <label>fit</label>
+            <!-- canvas fit: compact packs the data rectangle; shape sizes the
+                 canvas to the traversal's own boundary, so a radial payload
+                 ends at an inscribed ellipse instead of at the corners -->
+            <select id="eFit"></select>
+          </div>
+          <div class="field">
             <label>keymap</label>
             <!-- Two kinds, kept visibly apart because they change the shape of
                  the encode, not just where the key is read from. The keyless
-                 pair generates the key from position, so no pixel is held back:
-                 the image is about half the area and the cover is gone. -->
-            <select id="eKeymap">
-              <optgroup label="key pixel">
-                <option value="adjacent">adjacent</option>
-                <option value="poles">poles</option>
-                <option value="mirror-x">mirror-x</option>
-                <option value="mirror-y">mirror-y</option>
-                <option value="offset">offset</option>
-                <option value="rotate">rotate</option>
-              </optgroup>
-              <optgroup label="keyless — half size">
-                <option value="none">none</option>
-              </optgroup>
-            </select>
+                 group generates the key from position, so no pixel is held
+                 back: the image is about half the area and the cover is gone.
+                 The split itself is the codec's (KEYLESS_KEYMAPS). -->
+            <select id="eKeymap"></select>
             <span
               id="keymapParams"
               style="display: none; align-items: center; gap: 4px"
@@ -1684,6 +1672,25 @@
         .map((n) => `<option>${n}</option>`)
         .join("");
 
+      // Traversal, keymap and fit selects are built from the schema's ENUMS —
+      // the same lists validation uses, so they cannot lag a codec release.
+      eTraversal.innerHTML = StegassetteJobs.ENUMS.traversal
+        .map((n) => `<option>${n}</option>`)
+        .join("");
+      {
+        const groups = { keyed: [], keyless: [] };
+        for (const k of StegassetteJobs.ENUMS.keymap)
+          groups[isKeyless(k) ? "keyless" : "keyed"].push(k);
+        const opts = (names) =>
+          names.map((n) => `<option>${n}</option>`).join("");
+        eKeymap.innerHTML =
+          `<optgroup label="key pixel">${opts(groups.keyed)}</optgroup>` +
+          `<optgroup label="keyless — half size">${opts(groups.keyless)}</optgroup>`;
+      }
+      eFit.innerHTML = StegassetteJobs.ENUMS.fit
+        .map((n) => `<option>${n}</option>`)
+        .join("");
+
       // chanPlan is the source of truth: [{ ch:"r"|"g"|"b", combine }]
       let chanPlan = ["r", "g", "b"].map((ch) => ({ ch, combine: "xor" }));
 
@@ -1892,6 +1899,19 @@
         setChanPlan(plan.slots);
         updateLayoutVisibility?.();
         updateTravParams?.();
+        // updateTravParams just rebuilt the param inputs at their defaults, so
+        // the job's own values have to land after it.
+        if (j.traversal === "angle") {
+          setSel(document.getElementById("eangle-a"), j.angleA);
+          setSel(document.getElementById("eangle-b"), j.angleB);
+        } else if (j.traversal === "fisher-yates" && j.seed != null) {
+          setSel(document.getElementById("eFySeed"), j.seed);
+        } else if (j.traversal === "radial") {
+          setSel(document.getElementById("eDirection"), j.direction);
+        } else if (j.traversal === "spiral") {
+          setSel(document.getElementById("eRotation"), j.rotation);
+        }
+        setSel(eFit, j.fit);
         updateReconLabel?.();
         // shared text entries — from split.entries (series; they go on every
         // chunk), job.entries (batch format), or job.texts (ui format)
@@ -1958,7 +1978,14 @@
         } else if (eTraversal.value === "fisher-yates") {
           const sv = document.getElementById("eFySeed")?.value.trim();
           if (sv) job.seed = parseInt(sv, 10) >>> 0;
+        } else if (eTraversal.value === "radial") {
+          const d = document.getElementById("eDirection")?.value;
+          if (d === "in") job.direction = d;
+        } else if (eTraversal.value === "spiral") {
+          const r = document.getElementById("eRotation")?.value;
+          if (r === "ccw") job.rotation = r;
         }
+        if (eFit.value !== "compact") job.fit = eFit.value;
         job.keymap = eKeymap.value;
         if (eKeymap.value === "offset") {
           job.kx = parseInt(document.getElementById("ekx")?.value, 10) | 0;
@@ -2813,6 +2840,12 @@
         el.style.cssText = "width:52px";
         return el;
       }
+      function mkEnumSelect(id, names) {
+        const el = document.createElement("select");
+        el.id = id;
+        el.innerHTML = names.map((n) => `<option>${n}</option>`).join("");
+        return el;
+      }
       function updateTravParams() {
         const t = eTraversal.value;
         travParams.innerHTML = "";
@@ -2829,6 +2862,18 @@
           inp.placeholder = "random";
           inp.style.width = "80px";
           travParams.appendChild(inp);
+        } else if (t === "radial") {
+          travParams.style.display = "contents";
+          travParams.appendChild(mkLabel("direction"));
+          travParams.appendChild(
+            mkEnumSelect("eDirection", StegassetteJobs.ENUMS.direction),
+          );
+        } else if (t === "spiral") {
+          travParams.style.display = "contents";
+          travParams.appendChild(mkLabel("rotation"));
+          travParams.appendChild(
+            mkEnumSelect("eRotation", StegassetteJobs.ENUMS.rotation),
+          );
         } else {
           travParams.style.display = "none";
         }
@@ -3786,7 +3831,9 @@
               const srcImg = new Stegassette.Img(srcW, srcH, srcData);
               const totalBytes = Stegassette.containerInteriorBytes(entries);
               const padMargin = opts.pack === "aligned" ? planBpp - 1 : 0;
-              const scaled = Stegassette.autoScaleImg(srcImg, totalBytes + padMargin, B, aspectOverride, planBpp, Stegassette.stgcHeaderWidth(opts));
+              const keyless = Stegassette.KEYLESS_KEYMAPS.has(opts.keymap);
+              const fitFn = Stegassette.resolveFit(opts.fit || "compact", opts.traversal);
+              const scaled = Stegassette.autoScaleImg(srcImg, totalBytes + padMargin, B, aspectOverride, planBpp, Stegassette.stgcHeaderWidth(opts), keyless, fitFn);
               const encImg = Stegassette.encodeContainer(entries, scaled, opts, scaled);
               const outW = encImg.width, outH = encImg.height;
               const cnv = new OffscreenCanvas(outW, outH);
@@ -3827,6 +3874,8 @@
           p.planBpp,
           // small data-only payloads would otherwise scale below the header
           Stegassette.stgcHeaderWidth(p.opts),
+          isKeyless(p.opts.keymap),
+          Stegassette.resolveFit(p.opts.fit || "compact", p.opts.traversal),
         );
         // (entries, srcImg, opts, keyImg) — opts is third here, where the old
         // vendored core took the key image. Self-keying, so both are `scaled`.
@@ -4078,6 +4127,12 @@
           travP.seed = sv
             ? parseInt(sv, 10) >>> 0
             : (Math.random() * 0x100000000) >>> 0;
+        } else if (traversal === "radial") {
+          if (document.getElementById("eDirection")?.value === "in")
+            travP.direction = "in";
+        } else if (traversal === "spiral") {
+          if (document.getElementById("eRotation")?.value === "ccw")
+            travP.rotation = "ccw";
         }
         if (eKeymap.value === "offset") {
           travP.kx = parseInt(document.getElementById("ekx")?.value, 10) | 0;
@@ -4090,6 +4145,7 @@
           keymap: eKeymap.value,
           borderWidth: B,
           params: travP,
+          fit: eFit.value,
           pack,
           channels,
           bytesPerSample: tgtBit >> 3,
@@ -4151,15 +4207,28 @@
         // ── capacity guard ──────────────────────────────────────────────
         // Estimate the output image size up front so a too-large payload warns
         // instead of crashing the tab mid-encode. Data pixels are ~half the
-        // image, so total ≈ 2× the data pixels the payload needs.
+        // image (all of it when keyless), and a shaped fit leaves the corners
+        // outside the payload, so the estimate pads for both.
         const guardBytes = Stegassette.containerInteriorBytes(entries);
         const reqDataPx = Math.ceil(guardBytes / planBpp);
-        const estPx = reqDataPx * 2;
+        const guardKeyless = isKeyless(eKeymap.value);
+        const guardFit = Stegassette.resolveFit(eFit.value, traversal);
+        const estPx = Math.ceil(
+          reqDataPx *
+            (guardKeyless ? 1 : 2) *
+            (eFit.value === "shape" ? 4 / Math.PI : 1),
+        );
         // resolve a fractional border (% of output width) → px now that the
         // payload-driven interior size is known; keep opts.borderWidth in sync.
         if (borderFraction) {
           const aspect = aspectOverride != null ? aspectOverride : srcW / srcH;
-          B = Stegassette.resolveBorderWidth(borderFraction, reqDataPx, aspect);
+          B = Stegassette.resolveBorderWidth(
+            borderFraction,
+            reqDataPx,
+            aspect,
+            guardKeyless,
+            guardFit,
+          );
           opts.borderWidth = B;
         }
         const estMB = ((estPx * 4) / 1048576).toFixed(0);

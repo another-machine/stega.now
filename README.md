@@ -98,21 +98,21 @@ no-build and depend on nothing at runtime.
 
 Two patterns:
 
-- **From npm** (`codec`, `css`): the package is a devDependency, so the
-  version lives in `package.json` and the lockfile and there is no drift to
-  detect. Moving to a new release:
+- **From npm** (`codec`, `css`, `detect`): the package is a devDependency, so
+  the version lives in `package.json` and the lockfile and there is no drift
+  to detect. Moving to a new release:
 
       npm i @amplib/steganography@latest
       npm run codec
 
-  Commit the resulting `lib/` diff. `css` does the same for `@amplib/ui`.
+  Commit the resulting `lib/` diff. `css` and `detect` do the same for
+  `@amplib/ui` and `@amplib/music-detection`.
 
-- **From a sibling checkout** (`vocoder`, `detect`): the package hasn't
-  shipped the needed build to npm yet, so the script copies out of
+- **From a sibling checkout** (`vocoder`): the package hasn't shipped the
+  needed build to npm yet, so the script copies out of
   `../public-library/packages/` and nothing records a version. The committed
   output means the site never depends on that checkout existing — only
-  re-vendoring does. Each of these becomes the npm pattern the day its
-  package ships.
+  re-vendoring does. It becomes the npm pattern the day its package ships.
 
 The codec bundles expose `window.Stegassette` and `window.StegassetteJobs`,
 built as self-contained IIFEs. The API is not the same as the old vendored
