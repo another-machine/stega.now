@@ -184,11 +184,6 @@
           <input type="file" id="bdir" webkitdirectory hidden />
           <button type="button" id="bpickDir">choose a folder</button>
         </span>
-        <span class="drop__sub">
-          audio files become tracks · images carry them · the first image (or
-          one named cover*) is the record · .lrc files matching a track name
-          become its lyrics
-        </span>
       </div>
 
       <fieldset class="u-full">
@@ -318,6 +313,20 @@
               <label for="sTraversal">traversal</label>
               <select id="sTraversal"></select>
             </div>
+            <div class="field" id="fDirection" hidden>
+              <label for="sDirection">direction</label>
+              <select id="sDirection">
+                <option value="out">out — center first</option>
+                <option value="in">in — edges first</option>
+              </select>
+            </div>
+            <div class="field" id="fRotation" hidden>
+              <label for="sRotation">rotation</label>
+              <select id="sRotation">
+                <option value="cw">clockwise</option>
+                <option value="ccw">counter-clockwise</option>
+              </select>
+            </div>
             <div class="field">
               <label for="sKeymap">keymap</label>
               <select id="sKeymap"></select>
@@ -393,9 +402,8 @@
           <input id="npSeek" type="range" min="0" max="1000" value="0" />
           <span id="npTime" class="u-faint">0:00 / 0:00</span>
           <label class="ht-arrange-inline u-faint"
-            >vol
-            <input id="npVol" type="range" min="0" max="100" value="90" /></label
-          >
+            >vol <input id="npVol" type="range" min="0" max="100" value="90"
+          /></label>
           <span id="npLevel" class="u-faint"></span>
         </div>
 
@@ -508,17 +516,34 @@
         ["sKeymap", Album.METHODS.keymap, Album.STEG.keymap],
       ]) {
         $(id).innerHTML = list
-          .map(
-            (n) => `<option${n === def ? " selected" : ""}>${n}</option>`,
-          )
+          .map((n) => `<option${n === def ? " selected" : ""}>${n}</option>`)
           .join("");
       }
-      const stegChoice = () => ({
-        combine: $("sCombine").value,
-        traversal: $("sTraversal").value,
-        keymap: $("sKeymap").value,
-        border: parseFloat($("sBorder").value) || 0,
-      });
+      // direction (radial) and rotation (spiral) only mean anything for
+      // their own traversal — shown and sent only when it is selected
+      function syncTraversalParams() {
+        const t = $("sTraversal").value;
+        $("fDirection").hidden = t !== "radial";
+        $("fRotation").hidden = t !== "spiral";
+      }
+      $("sTraversal").addEventListener("change", syncTraversalParams);
+      syncTraversalParams();
+      const stegChoice = () => {
+        const traversal = $("sTraversal").value;
+        const params =
+          traversal === "radial"
+            ? { direction: $("sDirection").value }
+            : traversal === "spiral"
+              ? { rotation: $("sRotation").value }
+              : {};
+        return {
+          combine: $("sCombine").value,
+          traversal,
+          keymap: $("sKeymap").value,
+          border: parseFloat($("sBorder").value) || 0,
+          params,
+        };
+      };
       const normChoice = () => {
         // a blank or non-numeric target would silence the album, so it falls
         // back to the default rather than poisoning the gain with NaN
@@ -549,10 +574,16 @@
       async function takeBuildFiles(files) {
         const byName = (a, b) =>
           a.name.localeCompare(b.name, undefined, { numeric: true });
-        const audio = [...files].filter((f) => AUDIO_RE.test(f.name)).sort(byName);
-        const images = [...files].filter((f) => IMAGE_RE.test(f.name)).sort(byName);
+        const audio = [...files]
+          .filter((f) => AUDIO_RE.test(f.name))
+          .sort(byName);
+        const images = [...files]
+          .filter((f) => IMAGE_RE.test(f.name))
+          .sort(byName);
         const lyrics = [...files].filter((f) => LYRIC_RE.test(f.name));
-        const albumMeta = [...files].find((f) => /(^|\/)album\.json$/i.test(f.name));
+        const albumMeta = [...files].find((f) =>
+          /(^|\/)album\.json$/i.test(f.name),
+        );
 
         const coverIdx = images.findIndex((f) => /(^|\/)cover/i.test(f.name));
         const cover = images.length
@@ -649,7 +680,7 @@
         $("estimate").textContent = picked.tracks.length
           ? `≈ ${(pcm / 1048576).toFixed(1)} MB of audio · ` +
             `≈ ${(perPart / 1048576).toFixed(1)} MB per image ` +
-            `(≈ ${((perPart / 3) * 2 / 1e6).toFixed(1)} MP) — more images per track means smaller images`
+            `(≈ ${(((perPart / 3) * 2) / 1e6).toFixed(1)} MP) — more images per track means smaller images`
           : "";
       }
       for (const id of ["aRate", "aBits", "aCh", "aParts"])
@@ -658,8 +689,12 @@
 
       $("bpickFiles").addEventListener("click", () => $("bfiles").click());
       $("bpickDir").addEventListener("click", () => $("bdir").click());
-      $("bfiles").addEventListener("change", (e) => takeBuildFiles(e.target.files));
-      $("bdir").addEventListener("change", (e) => takeBuildFiles(e.target.files));
+      $("bfiles").addEventListener("change", (e) =>
+        takeBuildFiles(e.target.files),
+      );
+      $("bdir").addEventListener("change", (e) =>
+        takeBuildFiles(e.target.files),
+      );
       wireDrop($("bdrop"), takeBuildFiles);
 
       $("buildBtn").addEventListener("click", async () => {
@@ -776,13 +811,19 @@
             : "no cover — these images carry plain audio, so they play as they are";
           return;
         }
-        albumKey = loaded.cover.key ? await Album.importKey(loaded.cover.key) : null;
+        albumKey = loaded.cover.key
+          ? await Album.importKey(loaded.cover.key)
+          : null;
         renderAlbum();
         $("pstatus").textContent =
           (loaded.cover.encrypted === false
-            ? "loaded " + (loaded.cover.album.title || "the album") + " (not encrypted)"
+            ? "loaded " +
+              (loaded.cover.album.title || "the album") +
+              " (not encrypted)"
             : "unlocked with " + (loaded.cover.album.title || "the cover")) +
-          (loaded.skipped.length ? " · skipped: " + loaded.skipped.join("; ") : "");
+          (loaded.skipped.length
+            ? " · skipped: " + loaded.skipped.join("; ")
+            : "");
       }
 
       function renderAlbum() {
@@ -814,7 +855,8 @@
           .filter(Boolean)
           .join(" · ");
         $("methodMeta").textContent = [
-          a.steg && `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keymap}`,
+          a.steg &&
+            `${a.steg.combine} / ${a.steg.traversal} / ${a.steg.keymap}`,
           a.normalize && `normalize: ${a.normalize.mode}`,
           a.encrypted === false
             ? "not encrypted — the images play on their own"
@@ -931,7 +973,9 @@
       function markShelf() {
         $("shelves")
           .querySelectorAll("figure[data-key]")
-          .forEach((f) => f.classList.toggle("now", f.dataset.key === shownKey));
+          .forEach((f) =>
+            f.classList.toggle("now", f.dataset.key === shownKey),
+          );
       }
 
       // ---- the reveal for one part -------------------------------
@@ -1167,7 +1211,11 @@
 
       async function playTrack(n, offset = 0) {
         const track = loaded.cover.tracks.find((t) => t.n === n);
-        const { parts, missing } = Album.trackParts(loaded.cover, loaded.parts, n);
+        const { parts, missing } = Album.trackParts(
+          loaded.cover,
+          loaded.parts,
+          n,
+        );
         if (!track || !parts.length || missing.length) {
           $("pstatus").textContent =
             "✗ track " + n + " is missing image(s) " + missing.join(",");
@@ -1222,7 +1270,8 @@
           const next = loaded.cover.tracks.find((x) => x.n === np.n + 1);
           const ok =
             next &&
-            !Album.trackParts(loaded.cover, loaded.parts, next.n).missing.length;
+            !Album.trackParts(loaded.cover, loaded.parts, next.n).missing
+              .length;
           np.base = np.dur;
           stop();
           if (ok) playTrack(next.n, 0);
@@ -1316,9 +1365,9 @@
           // smooth scroll every tick restarted it before it could settle
           const raw = $("lraw");
           if (!raw.hidden) {
-            raw.querySelectorAll("div").forEach((d) =>
-              d.classList.toggle("now", +d.dataset.i === i),
-            );
+            raw
+              .querySelectorAll("div")
+              .forEach((d) => d.classList.toggle("now", +d.dataset.i === i));
             const el = raw.querySelector("div.now");
             if (el && raw.scrollHeight > raw.clientHeight)
               raw.scrollTop = Math.max(
@@ -1339,7 +1388,8 @@
 
       // ---- transport --------------------------------------------
       $("pplay").addEventListener("click", () => {
-        if (isPlaying()) stop(); // stop() remembers where we were
+        if (isPlaying())
+          stop(); // stop() remembers where we were
         else if (np) playTrack(np.n, np.base < np.dur - 0.02 ? np.base : 0);
       });
       $("reencode").addEventListener("click", async () => {
@@ -1406,8 +1456,12 @@
 
       $("ppickFiles").addEventListener("click", () => $("pfiles").click());
       $("ppickDir").addEventListener("click", () => $("pdir").click());
-      $("pfiles").addEventListener("change", (e) => takePlayFiles(e.target.files));
-      $("pdir").addEventListener("change", (e) => takePlayFiles(e.target.files));
+      $("pfiles").addEventListener("change", (e) =>
+        takePlayFiles(e.target.files),
+      );
+      $("pdir").addEventListener("change", (e) =>
+        takePlayFiles(e.target.files),
+      );
       wireDrop($("pdrop"), takePlayFiles);
 
       setMode("build");

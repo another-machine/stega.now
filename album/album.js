@@ -32,10 +32,14 @@ const Album = (() => {
   // the artwork readable underneath. All combines are lossless. This is the
   // codec's collection default; albums have never wanted anything else.
   const STEG = Stegassette.COLLECTION_STEG;
-  // the methods a build can choose from, straight out of the format
+  // the methods a build can choose from, straight out of the format.
+  // TRAVERSAL_NAMES keeps legacy traversals too, since decode still has to
+  // recognize them — TRAVERSAL_LEGACY is what marks them not-for-encoding.
   const METHODS = {
     combine: Stegassette.COMBINE_NAMES,
-    traversal: Stegassette.TRAVERSAL_NAMES,
+    traversal: Stegassette.TRAVERSAL_NAMES.filter(
+      (n) => !Stegassette.TRAVERSAL_LEGACY[n],
+    ),
     keymap: Stegassette.KEYMAP_NAMES,
   };
 
