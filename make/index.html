@@ -1190,11 +1190,16 @@
               // (v = ly*IW + lx) — 4 bytes/pixel vs ~64 for an [x,y] tuple, the
               // difference between a few MB and multiple GB on large images.
               // Data pixel coords: dx = (v % IW) + B, dy = (v / IW | 0) + B.
+              // Keyless encodes walk ALL interior pixels, keyed ones only the
+              // checkerboard data pixels — the flag halves the path, so
+              // omitting it made every span/reveal computation below map onto
+              // a path with twice-too-few entries.
               const pathIdx = Stegassette.getPathIndices(
                 IW,
                 IH,
                 opts.traversal,
                 opts.params || {},
+                Stegassette.KEYLESS_KEYMAPS.has(opts.keymap),
               );
               const audioEntries = entries.filter((e) =>
                 e.mimetype.startsWith("audio/"),
@@ -1234,9 +1239,15 @@
                   const audioStartPxIdx = Math.floor(
                     audioEntry.dataOffset / bytesPerPixel,
                   );
-                  const audioEndPxIdx = Math.ceil(
-                    (audioEntry.dataOffset + audioEntry.data.length) /
-                      bytesPerPixel,
+                  // Clamped like the library's revealSpanForEntry: an end past
+                  // the path would stretch the time mapping and index off the
+                  // end of pathIdx (NaN coords, silent no-op clears).
+                  const audioEndPxIdx = Math.min(
+                    Math.ceil(
+                      (audioEntry.dataOffset + audioEntry.data.length) /
+                        bytesPerPixel,
+                    ),
+                    pathIdx.length,
                   );
                   const pathLen = audioEndPxIdx - audioStartPxIdx;
                   const revealOrder = Stegassette.computeRevealOrder({
@@ -2339,9 +2350,11 @@
         ).bytesPerPixel;
       }
       // output megapixels a chunk of `sec` seconds would need
+      // (keyed encodes pair every data pixel with a key pixel — ×2; keyless ×1)
       function chunkMegapixels(sec) {
         const bytes = sec * uiBytesPerSecond();
-        return (Math.ceil(bytes / uiBytesPerPixel()) * 2) / 1048576;
+        const perData = isKeyless(eKeymap.value) ? 1 : 2;
+        return (Math.ceil(bytes / uiBytesPerPixel()) * perData) / 1048576;
       }
 
       function seriesWindow() {
@@ -2975,8 +2988,8 @@
           const carrying = new Set(chanPlan.map((s) => s.ch));
           const kept = ["r", "g", "b"].filter((c) => !carrying.has(c));
           reconLabel.textContent = kept.length
-            ? `recon: full-res (${kept.join("+").toUpperCase()} real) · ½ area`
-            : "recon: none — keyless, all channels carry · ½ area";
+            ? `recon: full-res (${kept.join("+").toUpperCase()} real)`
+            : "recon: none — keyless, all channels carry";
           reconLabel.toggleAttribute("data-warn", !kept.length);
           return;
         }
@@ -3003,6 +3016,8 @@
         reconLabel.toggleAttribute("data-warn", !!warn);
       }
       eKeymap.addEventListener("change", updateReconLabel);
+      // The size hint's key-pixel factor depends on the keymap too.
+      eKeymap.addEventListener("change", updateSizeHint);
       updateReconLabel();
 
       // ── dropzones ────────────────────────────────────────────────────
@@ -3267,7 +3282,12 @@
         });
         const mtLen = new TextEncoder().encode(audioMime).length;
         const totalInterior = 2 + mtLen + 2 + 0 + 4 + audioBytes;
-        const totalPx = Math.ceil(totalInterior / 3) * 2;
+        // Derive from the live plan and keymap — a hardcoded 3 B/px × 2
+        // (legacy packed-rgb keyed) overstated keyless single-channel encodes
+        // and understated everything else.
+        const totalPx =
+          Math.ceil(totalInterior / uiBytesPerPixel()) *
+          (isKeyless(eKeymap.value) ? 1 : 2);
         const kb = (audioBytes / 1024).toFixed(0);
         const srNote =
           !doResamp && tgtSr !== srcSr ? `  [src ${srcSr} Hz]` : "";

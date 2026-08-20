@@ -25,6 +25,12 @@
       h1 a {
         text-decoration: none;
       }
+      /* Air under the h1 — the body gap alone sits the intro against it.
+         Same move as the index's .columns: section flow, minus the body
+         gap already in the stack. */
+      h1 + section {
+        margin-block-start: calc(var(--ht-flow-section) - var(--ht-flow));
+      }
 
       /* the key fold: secondary on purpose — most stegassettes need no key */
       #keybox {
