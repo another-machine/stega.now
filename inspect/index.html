@@ -80,9 +80,17 @@
         gap: var(--ht-space-4);
         align-items: flex-start;
       }
+      /* Every preview on this page — the cover pair and the image entries
+         below — sits in a column flex (.frame, .entry). Their default
+         align-items: stretch overrides width: auto, so the image took the
+         column's width and max-height then squashed anything taller than it
+         was wide. flex-start hands sizing back to the pixels, and max-*
+         only ever shrinks. */
       .previews img,
-      .previews canvas {
+      .previews canvas,
+      .entry img {
         display: block;
+        align-self: flex-start;
         max-width: 220px;
         max-height: 220px;
         width: auto;
@@ -131,15 +139,6 @@
         color: var(--ht-ink);
         overflow-wrap: anywhere;
         min-inline-size: 0;
-      }
-      .entry img {
-        display: block;
-        max-width: 220px;
-        max-height: 220px;
-        width: auto;
-        height: auto;
-        image-rendering: pixelated;
-        border: var(--ht-hairline) solid var(--ht-line);
       }
       .entry .note {
         font-size: var(--ht-text-small);
