@@ -8,9 +8,13 @@ JPEG stills at 6fps and 128px wide, and three text entries (`Metadata`,
 
 The page follows `live/`: one work hangs at a time above a rail of the rest.
 It adds two things, both read out of the payload the reveal is already
-eating. The clip plays beside the reveal, and the card under them shows the
-scene, the year, the quote, and the note I wrote back to the kid in the
-picture.
+eating. The reveal takes a line to itself, and under it the clip plays beside
+the card — the scene, the year, the quote, and the note I wrote back to the
+kid in the picture. Narrower than 800px the card drops under the clip.
+
+The clip's height is `.pane.film`'s `clamp()` in `index.html`, and the frames'
+own ratio finds its width. Raising it takes height from the reveal, since the
+two share the room.
 
 The clip dissolves rather than cuts. Six frames a second is slow enough that
 a cut reads as a stutter, so each frame holds for the first part of its turn

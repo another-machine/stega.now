@@ -51,15 +51,14 @@
         padding-inline: var(--gal-pad);
       }
 
-      /* stage: reveal and clip side by side. The room is a flex column, so
-         the stage takes the height the card and the rail leave it — that is
-         what makes the panes definite enough to bound a picture. Collapsed to
-         nothing until a year is chosen, so the rail sits alone at rest. */
+      /* The stage stacks: the reveal takes a line to itself, and under it the
+         clip sits beside the card. Collapsed to nothing until a year is
+         chosen, so the rail sits alone in the room at rest. */
       .stage {
-        align-items: stretch;
         display: flex;
         flex: 1 1 auto;
-        gap: var(--kid-gap);
+        flex-direction: column;
+        gap: var(--gal-pad);
         justify-content: center;
         margin-top: var(--gal-pad);
         min-height: 0;
@@ -75,30 +74,21 @@
         opacity: 0;
       }
 
-      /* Both pictures stand at the stage's full height, so a pane is exactly
-         as wide as its picture is there: give the pane the picture's own
-         aspect ratio and it takes no more. The script sets the pair when a
-         year is chosen. Shares rather than ratios left each pane wider than
-         its picture, and the leftover opened as a gap down the middle. */
       .pane {
         align-items: center;
         display: flex;
-        flex: 0 1 auto;
-        flex-direction: column;
-        height: 100%;
         justify-content: center;
         margin: 0;
         min-height: 0;
         min-width: 0;
-        width: auto;
-      }
-      .pane.reveal {
-        aspect-ratio: var(--reveal-share, 3);
-      }
-      .pane.film {
-        aspect-ratio: var(--film-share, 1.3333);
       }
 
+      /* the reveal takes the width of the room and whatever height the line
+         under it leaves */
+      .pane.reveal {
+        flex: 1 1 auto;
+        width: 100%;
+      }
       /* The decode surface is two stacked canvases that both fill the wrapper.
          Letting the wrapper fill the pane and giving the canvases object-fit
          keeps the picture undistorted at any pane shape — and keeps the two in
@@ -126,7 +116,23 @@
         width: 100%;
       }
 
-      /* the clip: 128px-wide stills out of the same payload, at 6fps */
+      /* the line under the reveal: the clip, and the card beside it */
+      .lower {
+        align-items: center;
+        display: flex;
+        flex: 0 0 auto;
+        gap: var(--kid-gap);
+        justify-content: center;
+        width: 100%;
+      }
+
+      /* the clip: 128px-wide stills out of the same payload, at 6fps. Its
+         height is the line's; the frames' own ratio sets the width. */
+      .pane.film {
+        aspect-ratio: var(--film-share, 1.3333);
+        flex: 0 0 auto;
+        height: clamp(160px, 34svh, 420px);
+      }
       .film > canvas {
         display: block;
         height: 100%;
@@ -134,17 +140,17 @@
         object-fit: contain;
         width: 100%;
       }
+
       /* the card: what the stegassette says about the moment it holds */
       .card {
         display: flex;
-        flex: 0 0 auto;
+        flex: 0 1 auto;
         flex-direction: column;
         gap: 0.35em;
-        max-width: min(90%, 800px);
-        text-align: center;
+        max-width: min(46ch, 100%);
+        text-align: left;
         text-shadow: 0 1px 8px var(--gal-paper);
         transition: opacity var(--gal-duration) ease-in;
-        width: 100%;
       }
       .card.hidden {
         opacity: 0;
@@ -162,12 +168,12 @@
       }
       .card > blockquote {
         font-size: 1.1em;
-        text-wrap: balance;
+        text-wrap: pretty;
       }
       .card > .message {
         font-size: 0.85em;
         font-style: italic;
-        text-wrap: balance;
+        text-wrap: pretty;
       }
       .card > .message:empty,
       .card > blockquote:empty {
@@ -220,32 +226,19 @@
       /* narrow: the clip drops under the reveal, and the rail keeps its
          strip so both stay reachable without scrolling the room */
       @media (max-width: 800px) {
-        .stage {
+        /* no room for a column of text beside a picture: the card drops under
+           the clip and both centre, as everything else on the page does */
+        .lower {
           flex-direction: column;
           gap: var(--gal-pad);
         }
-        /* Stacked, the panes run the full width and the column shares out the
-           height, so the aspect-ratio sizing has nothing to do. Narrow the
-           clip itself, not its pane: give the pane a shrink-to-fit width and
-           the reveal surface it sizes resolves to zero. */
-        /* both selectors, not `.pane`: the aspect-ratio sizing above is set on
-           `.pane.reveal` and `.pane.film`, and a later rule does not win on
-           order alone when the earlier one is more specific */
-        .pane.reveal,
         .pane.film {
-          aspect-ratio: auto;
-          height: auto;
-          width: 100%;
-        }
-        .pane.reveal {
-          flex: 1 1 auto;
-        }
-        .pane.film {
-          flex: 0 0 auto;
-        }
-        .pane.film > canvas {
           height: auto;
           width: 60%;
+        }
+        .card {
+          max-width: min(90%, 800px);
+          text-align: center;
         }
       }
     </style>
@@ -271,17 +264,20 @@
           <figure class="pane reveal">
             <img alt="" aria-hidden="true" />
           </figure>
-          <figure class="pane film">
-            <canvas width="128" height="96"></canvas>
-          </figure>
-        </div>
 
-        <aside class="card hidden">
-          <p class="scene"></p>
-          <p class="year"></p>
-          <blockquote></blockquote>
-          <p class="message"></p>
-        </aside>
+          <div class="lower">
+            <figure class="pane film">
+              <canvas width="128" height="96"></canvas>
+            </figure>
+
+            <aside class="card hidden">
+              <p class="scene"></p>
+              <p class="year"></p>
+              <blockquote></blockquote>
+              <p class="message"></p>
+            </aside>
+          </div>
+        </div>
 
         <nav class="rail">
           <button class="work" aria-pressed="false">

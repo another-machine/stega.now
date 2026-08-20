@@ -124,12 +124,9 @@ function stopFilm(rec) {
   }
 }
 
-// Give each pane the width its picture needs at the stage's full height —
-// its aspect ratio. Both then stand the same height with no column to spare,
-// whatever shape the cover is: 1992 is wider than three of itself is tall,
-// 1997 is taller than it is wide, and one fixed ratio cannot serve both.
-function shareTheStage(rec) {
-  stage.style.setProperty("--reveal-share", rec.player.width / rec.player.height);
+// The clip's pane is sized by height, so it needs the frames' own ratio to
+// find its width. It comes out of the payload, so it is not ours to assume.
+function shareTheStage() {
   stage.style.setProperty("--film-share", film.width / film.height);
 }
 
@@ -235,7 +232,7 @@ document.querySelectorAll("nav.rail button").forEach((button) => {
     if (!rec.player.element.isConnected) revealPane.appendChild(rec.player.element);
     standin.hidden = true;
 
-    shareTheStage(rec);
+    shareTheStage();
     paint(rec, 0, 0);
     showCard(rec.player.entries);
 
