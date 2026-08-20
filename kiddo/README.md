@@ -8,15 +8,17 @@ JPEG stills at 6fps and 128px wide, and three text entries (`Metadata`,
 
 The page is built on `geese/`: a promenade of rooms, one work to a room, each
 picture hung at its own native size against a veiled enlargement of itself.
-Tapping a picture loads and plays it. What geese does not have is the rest of
-what these pictures carry, which shares the room with the work: the clip, and
-the card — the scene, the year, the quote, and the note I wrote back to the
-kid in the picture.
+Tapping a picture loads and plays it. What geese does not have is the clip
+these pictures also carry, which shares the room with the work.
 
 A room arranges itself around the shape of its cover, which `data-shape` in
 the markup states, since it is known before anything decodes. A wide cover
-runs across the top with the clip and the card beneath it; a tall one stands
-beside them. Narrower than 800px every room stacks and centres.
+runs across the top with the clip beneath it; a tall one stands beside it.
+Narrower than 800px every room stacks and centres.
+
+The text entries are decoded and go unused for now. The page showed them on a
+card beside the clip — the scene, the year, the quote, and the note I wrote
+back to the kid in the picture. `git show 21fc663:kiddo/index.html` has it.
 
 The clip dissolves rather than cuts. Six frames a second is slow enough that
 a cut reads as a stutter, so each frame holds for the first part of its turn

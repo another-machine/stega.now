@@ -33,9 +33,9 @@
       /* Screen-specific pieces on top of amplib-gallery. Built on geese/: a
          promenade of rooms, one work to a room, each picture hung at its own
          native size against a veiled enlargement of itself. Tapping a picture
-         loads and plays it. What geese does not have is the rest of what these
-         pictures carry — the clip and the card — which share the room with the
-         work. Values are tokens. */
+         loads and plays it. What geese does not have is the clip these
+         pictures also carry, which shares the room with the work. Values are
+         tokens. */
       :root {
         --intro-width: 80%;
         --gal-veil: blur(1rem) brightness(35%);
@@ -58,7 +58,7 @@
 
       /* The room arranges itself around the shape of its picture, which is
          known before anything decodes: a wide cover runs across the top with
-         the clip and the card beneath, a tall one stands beside them. */
+         the clip beneath it, a tall one stands beside it. */
       .room {
         gap: var(--kid-gap);
         padding: var(--gal-pad);
@@ -83,7 +83,7 @@
          The caps are in viewport units, not percentages: the button has no
          size of its own for a percentage to measure against, so it is told
          what the room is spending elsewhere — the clip's line beneath a wide
-         picture, the card's column beside a tall one. */
+         picture, the clip's column beside a tall one. */
       .work {
         flex: 0 1 auto;
         justify-content: center;
@@ -135,26 +135,9 @@
         width: 100%;
       }
 
-      /* the clip and the card, once the picture has been played at least once */
-      .lower {
-        align-items: center;
-        display: flex;
-        flex: 0 0 auto;
-        gap: var(--kid-gap);
-        justify-content: center;
-        max-width: 100%;
-      }
-      .room:not([data-ready]) .lower {
-        display: none;
-      }
-      .room[data-shape="tall"] .lower {
-        flex-direction: column;
-        width: var(--kid-column);
-      }
-
-      /* the clip: 128px-wide stills out of the same payload, at 6fps. Beside a
-         tall picture the column sets its width; under a wide one its own
-         height does, and the frames' ratio finds the rest. */
+      /* the clip, once the picture has been played at least once. Under a
+         wide picture its own height sets its size; beside a tall one the
+         column the room reserved does, and the frames' ratio finds the rest. */
       .pane.film {
         align-items: center;
         aspect-ratio: var(--film-share, 1.3333);
@@ -165,9 +148,12 @@
         margin: 0;
         min-width: 0;
       }
+      .room:not([data-ready]) .pane.film {
+        display: none;
+      }
       .room[data-shape="tall"] .pane.film {
         height: auto;
-        width: 100%;
+        width: var(--kid-column);
       }
       .film > canvas {
         box-shadow: var(--gal-glow);
@@ -178,47 +164,7 @@
         width: 100%;
       }
 
-      /* the card: what the stegassette says about the moment it holds */
-      .card {
-        display: flex;
-        flex: 0 1 auto;
-        flex-direction: column;
-        gap: 0.35em;
-        max-width: min(46ch, 100%);
-        text-align: left;
-        text-shadow: 0 1px 8px var(--gal-paper);
-        transition: opacity var(--gal-duration) ease-in;
-      }
-      .card.hidden {
-        opacity: 0;
-      }
-      .card > * {
-        margin: 0;
-      }
-      .card > .scene {
-        font-size: 0.9em;
-        font-style: italic;
-      }
-      .card > .year {
-        font-size: 0.7em;
-        letter-spacing: 0.2em;
-      }
-      .card > blockquote {
-        font-size: 1.1em;
-        text-wrap: pretty;
-      }
-      .card > .message {
-        font-size: 0.85em;
-        font-style: italic;
-        text-wrap: pretty;
-      }
-      .card > .message:empty,
-      .card > blockquote:empty {
-        display: none;
-      }
-
-      /* narrow: no room for a column of text beside a picture, whatever shape
-         the cover is — the room stacks and everything centres */
+      /* narrow: the clip drops under the picture whatever shape the cover is */
       @media (max-width: 800px) {
         .room[data-shape="tall"] {
           flex-direction: column;
@@ -232,20 +178,10 @@
           );
           max-width: min(90svw, var(--og-width));
         }
-        .lower,
-        .room[data-shape="tall"] .lower {
-          flex-direction: column;
-          gap: var(--gal-pad);
-          width: 100%;
-        }
         .pane.film,
         .room[data-shape="tall"] .pane.film {
           height: auto;
           width: 60%;
-        }
-        .card {
-          max-width: min(90%, 800px);
-          text-align: center;
         }
       }
     </style>
@@ -292,17 +228,9 @@
             loading="lazy"
           />
         </button>
-        <div class="lower">
-          <figure class="pane film">
+        <figure class="pane film">
             <canvas width="128" height="96"></canvas>
           </figure>
-          <aside class="card hidden">
-            <p class="scene"></p>
-            <p class="year"></p>
-            <blockquote></blockquote>
-            <p class="message"></p>
-          </aside>
-        </div>
       </section>
 
       <section
@@ -328,17 +256,9 @@
             loading="lazy"
           />
         </button>
-        <div class="lower">
-          <figure class="pane film">
+        <figure class="pane film">
             <canvas width="128" height="96"></canvas>
           </figure>
-          <aside class="card hidden">
-            <p class="scene"></p>
-            <p class="year"></p>
-            <blockquote></blockquote>
-            <p class="message"></p>
-          </aside>
-        </div>
       </section>
 
       <section
@@ -364,17 +284,9 @@
             loading="lazy"
           />
         </button>
-        <div class="lower">
-          <figure class="pane film">
+        <figure class="pane film">
             <canvas width="128" height="96"></canvas>
           </figure>
-          <aside class="card hidden">
-            <p class="scene"></p>
-            <p class="year"></p>
-            <blockquote></blockquote>
-            <p class="message"></p>
-          </aside>
-        </div>
       </section>
 
       <section
@@ -400,17 +312,9 @@
             loading="lazy"
           />
         </button>
-        <div class="lower">
-          <figure class="pane film">
+        <figure class="pane film">
             <canvas width="128" height="96"></canvas>
           </figure>
-          <aside class="card hidden">
-            <p class="scene"></p>
-            <p class="year"></p>
-            <blockquote></blockquote>
-            <p class="message"></p>
-          </aside>
-        </div>
       </section>
 
       <section
@@ -436,17 +340,9 @@
             loading="lazy"
           />
         </button>
-        <div class="lower">
-          <figure class="pane film">
+        <figure class="pane film">
             <canvas width="128" height="96"></canvas>
           </figure>
-          <aside class="card hidden">
-            <p class="scene"></p>
-            <p class="year"></p>
-            <blockquote></blockquote>
-            <p class="message"></p>
-          </aside>
-        </div>
       </section>
 
       <section class="room placard">

@@ -2,9 +2,9 @@
 // nothing else in it. Tapping the picture loads and plays it.
 //
 // A kiddo stegassette holds one audio entry, a run of `frame-001…` JPEG stills
-// at 6fps, and three text entries (Metadata, Quote, Message). RevealPlayer
-// decodes all of them and plays the audio; the stills and the card are ours to
-// drive. There is no callback per frame, so the clip runs off the player's own
+// at 6fps, and three text entries (Metadata, Quote, Message) the page does not
+// show yet. RevealPlayer decodes all of them and plays the audio; the stills
+// are ours to draw. There is no callback per frame, so the clip runs off its own
 // clock — `audioContext.currentTime - player.t0`, wrapped by `player.duration`
 // — which is the same clock the reveal sweeps on. One playhead, two pictures.
 //
@@ -19,28 +19,9 @@ const FADE = 0.5;
 // ease the ramp: a linear dissolve reads as a lurch through its midpoint
 const smoothstep = (x) => x * x * (3 - 2 * x);
 
-const decoder = new TextDecoder();
-
 let audioContext;
 let current = null;
 let building = false;
-
-// ── entries ─────────────────────────────────────────────────────────────────
-
-const textOf = (entries, name) => {
-  const entry = entries.find((e) => e.name === name);
-  return entry ? decoder.decode(entry.data).trim() : "";
-};
-
-// Metadata is a block of `Key: value` lines
-function facts(text) {
-  const out = {};
-  for (const line of text.split("\n")) {
-    const i = line.indexOf(":");
-    if (i > 0) out[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
-  }
-  return out;
-}
 
 // the stills, in order. Names are zero-padded to a fixed width, so they sort
 // as strings — but sort explicitly rather than trusting entry order.
@@ -101,17 +82,6 @@ function stopFilm(rec) {
 
 // ── a room ──────────────────────────────────────────────────────────────────
 
-function showCard(rec) {
-  const entries = rec.player.entries;
-  const meta = facts(textOf(entries, "Metadata"));
-  const quote = textOf(entries, "Quote");
-  rec.card.querySelector(".scene").textContent = meta.scene || "";
-  rec.card.querySelector(".year").textContent = meta.date || rec.room.dataset.year;
-  rec.card.querySelector("blockquote").textContent = quote ? `“${quote}”` : "";
-  rec.card.querySelector(".message").textContent = textOf(entries, "Message");
-  rec.card.classList.remove("hidden");
-}
-
 async function build(rec) {
   // The full-resolution stegassette is display:none until it is wanted, and a
   // lazy image with no box never intersects the viewport — so it would sit at
@@ -142,7 +112,6 @@ async function build(rec) {
   rec.button.appendChild(rec.player.element);
   rec.thumb.classList.add("gal-ghost");
   rec.thumb.setAttribute("aria-hidden", "true");
-  showCard(rec);
   rec.room.toggleAttribute("data-ready", true);
 }
 
@@ -193,7 +162,6 @@ document.querySelectorAll(".room[data-year]").forEach((room) => {
     thumb: room.querySelector("img.thumb"),
     media: room.querySelector("img.media"),
     film: room.querySelector(".film canvas"),
-    card: room.querySelector(".card"),
     player: null,
     frames: null,
     raf: null,
