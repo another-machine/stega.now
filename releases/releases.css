@@ -196,6 +196,27 @@ progress {
   inset: 0;
 }
 
+/* past the cap: encoded and decoded side by side instead of the animation */
+#npReveal .np-pair {
+  flex: 1 1 26rem;
+  min-width: min(100%, 18rem);
+  max-width: 48rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--ht-space-2) var(--ht-space-3);
+  align-items: start;
+}
+#npReveal .np-pair canvas {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  image-rendering: auto; /* pre-filtered to display size; same story as above */
+}
+#npReveal .np-pair p {
+  grid-column: 1 / -1;
+}
+
 #npLyrics {
   white-space: pre-wrap;
   max-height: 18rem;

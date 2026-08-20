@@ -393,7 +393,7 @@
     return {
       gen,
       expected, // how many parts the chain will eventually hold
-      parts: [], // {buffer, dur, start, img, opts, revealEntry, frames, gridIdx}
+      parts: [], // {buffer, dur, start, img, opts, revealEntry, pair, frames, gridIdx}
       // Looping is per-source, so it is only sound for a chain of one; a
       // multi-part loop would stack overlapping sources.
       loop: rel.kind === "video" && expected === 1,
@@ -558,7 +558,17 @@
       np.frameIdx = 0;
     }
     if (!part || !part.img) {
-      if (part && part.revealNote && !np.frameCtx) {
+      if (part && part.pair && !np.frameCtx) {
+        // Too big to animate: the encoded and decoded images, side by side.
+        const pairEl = document.createElement("div");
+        pairEl.className = "np-pair";
+        const note = document.createElement("p");
+        note.className = "u-faint ht-type-small";
+        note.textContent = part.revealNote;
+        pairEl.append(part.pair.enc, part.pair.dec, note);
+        npReveal.append(pairEl);
+        npReveal.hidden = false;
+      } else if (part && part.revealNote && !np.frameCtx) {
         const note = document.createElement("p");
         note.className = "u-faint ht-type-small";
         note.textContent = part.revealNote;
@@ -697,12 +707,13 @@
   // re-decodes the whole payload and sorts a pixel-count index array on the
   // main thread — seconds of jank. Fall back to the traversal-order sweep.
   const REVEAL_ENTRY_MAX = 32e6;
-  // The reveal's surfaces cost about 18 bytes a pixel on top of the
-  // AudioBuffer, which is what crashes tabs on the >100 MB tracks. The cap
-  // clears the largest image in the catalogue (65.6 Mpx) because the codec no
-  // longer holds a full-resolution base or overlay canvas: that track now
-  // peaks below what a 40-megapixel one cost before.
-  const REVEAL_MAX_PIXELS = 80e6;
+  // Even with the 1.5.3 surfaces (no full-resolution canvases), the biggest
+  // images still crash phone tabs, where the whole budget is around a
+  // gigabyte. Past the cap the reveal gives way to a static before/after
+  // pair; see decodeItem.
+  const REVEAL_MAX_PIXELS = 40e6;
+  // Longest edge of the pair's canvases.
+  const PAIR_MAX = 1024;
 
   async function extractAudio(entries) {
     const partEntry = entries.find((e) => e.name === "part.json");
@@ -753,9 +764,68 @@
     return buf;
   }
 
+  // One-pass box filter straight from raw RGBA to a small canvas. Every
+  // source pixel lands in exactly one k-by-k block, so the payload noise
+  // averages to grain instead of aliasing — and no full-resolution canvas
+  // exists at any point, which is the point: the pair stands in for the
+  // reveal exactly when full-resolution surfaces are what kills the tab.
+  function shrinkToCanvas(data, w, h) {
+    const k = Math.max(1, Math.ceil(Math.max(w, h) / PAIR_MAX));
+    const ow = Math.ceil(w / k);
+    const oh = Math.ceil(h / k);
+    const out = new ImageData(ow, oh);
+    const op = out.data;
+    for (let oy = 0; oy < oh; oy++) {
+      const y1 = Math.min(h, (oy + 1) * k);
+      for (let ox = 0; ox < ow; ox++) {
+        const x0 = ox * k;
+        const x1 = Math.min(w, x0 + k);
+        let r = 0,
+          g = 0,
+          b = 0,
+          n = 0;
+        for (let y = oy * k; y < y1; y++) {
+          let o = (y * w + x0) * 4;
+          for (let x = x0; x < x1; x++, o += 4) {
+            r += data[o];
+            g += data[o + 1];
+            b += data[o + 2];
+            n++;
+          }
+        }
+        const oo = (oy * ow + ox) * 4;
+        op[oo] = r / n;
+        op[oo + 1] = g / n;
+        op[oo + 2] = b / n;
+        op[oo + 3] = 255;
+      }
+    }
+    const c = document.createElement("canvas");
+    c.width = ow;
+    c.height = oh;
+    c.getContext("2d").putImageData(out, 0, 0);
+    return c;
+  }
+
   async function decodeItem(blob, gridIdx) {
-    const img = await imgFromBlob(blob);
+    let img = await imgFromBlob(blob);
     const { entries, opts } = Stegassette.decodeContainer(img, img);
+    const oversized = img.width * img.height > REVEAL_MAX_PIXELS;
+    let pair = null;
+    if (oversized) {
+      // The reveal's stand-in: the encoded image next to the cover the codec
+      // reconstructs from it, both box-filtered down to display size.
+      try {
+        const rec = Stegassette.reconstructCover(img, opts);
+        pair = {
+          enc: shrinkToCanvas(img.data, img.width, img.height),
+          dec: shrinkToCanvas(rec.data, rec.width, rec.height),
+        };
+      } catch (e) {} // the note alone still explains the missing reveal
+      // Free the full-resolution pixels (4 bytes each) before the
+      // AudioBuffer allocates; on phones that peak is the difference.
+      img = null;
+    }
     const { data, audioEntry } = await extractAudio(entries);
     let buffer = pcmToAudioBuffer(data, audioEntry.mimetype);
     if (!buffer) {
@@ -767,7 +837,6 @@
       buffer = actx.createBuffer(parsed.channels.length, parsed.channels[0].length, parsed.sampleRate);
       for (let c = 0; c < parsed.channels.length; c++) buffer.getChannelData(c).set(parsed.channels[c]);
     }
-    const oversized = img.width * img.height > REVEAL_MAX_PIXELS;
     let frames = null;
     if (rel.kind === "video") {
       const frameEntries = entries
@@ -782,13 +851,14 @@
     return {
       buffer,
       dur: buffer.duration,
-      img: oversized ? null : img,
+      img,
       opts,
       revealEntry:
         !oversized && audioEntry.data && audioEntry.data.length <= REVEAL_ENTRY_MAX
           ? audioEntry
           : null,
-      revealNote: oversized ? "image too large for the live decode view" : null,
+      pair,
+      revealNote: oversized ? "too big to animate decoding" : null,
       frames,
       entries,
       gridIdx,
