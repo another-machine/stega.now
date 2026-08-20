@@ -697,10 +697,12 @@
   // re-decodes the whole payload and sorts a pixel-count index array on the
   // main thread — seconds of jank. Fall back to the traversal-order sweep.
   const REVEAL_ENTRY_MAX = 32e6;
-  // Past this pixel count the reveal's surfaces (encoded copy, overlay,
-  // two full-res canvases) cost the better part of a gigabyte on top of the
-  // AudioBuffer, which is what actually crashes tabs on the >100 MB tracks.
-  const REVEAL_MAX_PIXELS = 40e6;
+  // The reveal's surfaces cost about 18 bytes a pixel on top of the
+  // AudioBuffer, which is what crashes tabs on the >100 MB tracks. The cap
+  // clears the largest image in the catalogue (65.6 Mpx) because the codec no
+  // longer holds a full-resolution base or overlay canvas: that track now
+  // peaks below what a 40-megapixel one cost before.
+  const REVEAL_MAX_PIXELS = 80e6;
 
   async function extractAudio(entries) {
     const partEntry = entries.find((e) => e.name === "part.json");
