@@ -73,9 +73,6 @@ stegassette and deletes it with the stegassette.
 
 ## Sub-projects
 
-- [album](album/) — builds and plays albums. A track's song splits across
-  one or more images. A cover stegassette holds metadata, ownership,
-  timestamped lyrics, and the key that decrypts the tracks.
 - [books](books/) — reads a book out of its own cover. One stegassette holds
   the whole thing: the record and table of contents, every chapter as
   markdown, every plate, and the jacket. It keeps your place, sets the page

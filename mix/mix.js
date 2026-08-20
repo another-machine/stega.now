@@ -215,7 +215,7 @@ const Mix = (() => {
   }
 
   // ---- images ------------------------------------------------
-  // Same pair as album/me: a Blob in, an Img for the codec, a PNG Blob
+  // Same pair as me/: a Blob in, an Img for the codec, a PNG Blob
   // back out. putImageData writes bytes verbatim rather than
   // premultiplying, which matters because the STGC header lives in the
   // border alpha.
@@ -1428,8 +1428,8 @@ const Mix = (() => {
   }
 
   // ---- zip (store-only; PNGs are already compressed) ---------
-  // The same writer album/ carries. Two copies of forty lines of ZIP
-  // header beats either subproject importing the other's format module.
+  // Forty lines of ZIP header, kept here rather than imported from another
+  // subproject's format module.
 
   const CRC = (() => {
     const t = new Uint32Array(256);

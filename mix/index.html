@@ -748,7 +748,7 @@
       $("tabMix").addEventListener("click", () => setMode("mix"));
 
       // A dropped folder arrives as directory entries, so walk them to get the
-      // files inside — same result as the file picker. Same walker album/ uses.
+      // files inside — same result as the file picker.
       async function filesFromDrop(dt) {
         const out = [];
         const entries = [...(dt.items || [])]
