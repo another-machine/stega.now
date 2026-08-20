@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stegassette/books</title>
+    <link rel="stylesheet" href="../ui.css" />
+    <style>
+      /* Layout only — type, color and spacing are amplib-ui's. Same body rule
+         as /, /album and /inspect so every page shares the same left edge.
+         The reading view is the one exception, and it says so where it
+         overrides this. */
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        width: 100%;
+      }
+      h1 a {
+        text-decoration: none;
+      }
+      h1 + section {
+        margin-block-start: calc(var(--ht-flow-section) - var(--ht-flow));
+      }
+      [hidden] {
+        display: none !important;
+      }
+
+      /* ---- the shelf: one book, its jacket and its contents ------------- */
+
+      .jacket {
+        display: grid;
+        grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+        gap: var(--ht-flow-section);
+        align-items: start;
+        width: 100%;
+      }
+      @media (max-width: 44rem) {
+        .jacket {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .jacket img {
+          max-width: 15rem;
+        }
+      }
+      .jacket img {
+        display: block;
+        width: 100%;
+        height: auto;
+        box-shadow: var(--ht-raised);
+      }
+      .facts {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-3);
+      }
+      .facts dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--ht-space-1) var(--ht-space-4);
+        margin: 0;
+        font-size: var(--ht-text-small);
+      }
+      .facts dt {
+        color: var(--ht-ink-faint);
+        text-transform: lowercase;
+      }
+      .facts dd {
+        margin: 0;
+        color: var(--ht-ink-dim);
+      }
+
+      /* ---- the shelf ---------------------------------------------------- */
+      /* Covers, not rows. What hangs here is the stegassette itself — the
+         encoded picture, payload and all — because that is the object you
+         get. A stegassette cannot be resized without destroying it, so
+         these are thumbnails of one, the same arrangement releases uses. */
+
+      .shelf-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+        gap: var(--ht-flow-section);
+        width: 100%;
+        max-width: var(--ht-page-max);
+      }
+      .shelf-item {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-3);
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+      .shelf-item img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: var(--ht-sunken);
+        box-shadow: var(--ht-raised);
+      }
+      .shelf-item:hover img,
+      .shelf-item:focus-visible img {
+        outline: 2px solid var(--ht-ink);
+        outline-offset: 2px;
+      }
+      .shelf-item:hover .shelf-name {
+        text-decoration: underline;
+      }
+      .shelf-line {
+        font-size: var(--ht-text-small);
+        line-height: var(--ht-leading-prose);
+        color: var(--ht-ink-faint);
+      }
+
+      /* ---- contents ---------------------------------------------------- */
+
+      /* A table of contents is a reading column, not a full-bleed table.
+         ht-measure is the same width the chapters themselves get, so the
+         two views share an edge. */
+      .toc {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-2);
+        width: 100%;
+        max-width: var(--ht-measure);
+      }
+      .toc-group + .toc-group {
+        margin-block-start: var(--ht-space-5);
+      }
+      .toc-item {
+        display: flex;
+        align-items: baseline;
+        gap: var(--ht-space-3);
+        width: 100%;
+        padding: var(--ht-space-2) 0;
+        border: 0;
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+      .toc-item:hover .toc-title {
+        text-decoration: underline;
+      }
+      .toc-title {
+        flex: 1 1 auto;
+      }
+      .toc-meta {
+        flex: 0 0 auto;
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-faint);
+        font-variant-numeric: tabular-nums;
+      }
+      /* where you stopped, so the shelf answers "where was I" at a glance */
+      .toc-item[data-here] .toc-title {
+        font-weight: 600;
+      }
+      .toc-item[data-here]::before {
+        content: "▸";
+        color: var(--ht-ink-dim);
+        margin-inline-end: calc(var(--ht-space-2) * -1);
+      }
+      .toc-item[data-read] .toc-title {
+        color: var(--ht-ink-faint);
+      }
+
+      /* ---- the reading view -------------------------------------------- */
+      /* This is the one place the site's left-aligned column gives way. A
+         book wants a measure and a centre, so the article takes over the
+         page and everything else moves into the bar above it. */
+
+      body[data-view="read"] {
+        padding: 0;
+        gap: 0;
+      }
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: var(--ht-space-3);
+        width: 100%;
+        padding: var(--ht-space-3) var(--ht-space-5);
+        background: var(--ht-paper);
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
+      }
+      .bar__where {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .bar__book {
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-faint);
+      }
+      .bar__chapter {
+        font-size: var(--ht-text-ui);
+        color: var(--ht-ink);
+      }
+      .bar__actions {
+        display: flex;
+        gap: var(--ht-space-2);
+        flex: 0 0 auto;
+      }
+      /* progress through the whole book, not the chapter — a thin rule under
+         the bar, because a book does not need a percentage shouted at it */
+      .bar__progress {
+        position: absolute;
+        inset-block-end: -1px;
+        inset-inline-start: 0;
+        height: 2px;
+        background: var(--ht-ink-dim);
+        transition: width var(--ht-duration) var(--ht-ease);
+      }
+
+      .reading {
+        width: 100%;
+        max-width: var(--ht-measure);
+        margin: 0 auto;
+        padding: var(--ht-space-8) var(--ht-space-5) var(--ht-space-9);
+        font-size: var(--reader-size, 1.0625rem);
+        line-height: var(--reader-leading, 1.7);
+      }
+      /* The site is monospace end to end, and that is its face. A book is
+         the one place to be able to leave it: forty thousand words of
+         fixed-pitch is a hard read. The stacks live here, not in the
+         script, so the script only ever names one of three. Mono stays the
+         default, because it is what the rest of the site already looks
+         like. */
+      body[data-font="serif"] .reading {
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+          "Times New Roman", serif;
+      }
+      body[data-font="sans"] .reading {
+        font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
+      .reading h2 {
+        margin: 0 0 var(--ht-space-6);
+      }
+      .reading h3 {
+        margin: var(--ht-space-7) 0 var(--ht-space-3);
+      }
+      .reading p {
+        margin: 0 0 var(--ht-space-5);
+      }
+      .reading blockquote {
+        margin: var(--ht-space-6) 0;
+        padding-inline-start: var(--ht-space-5);
+        border-inline-start: 2px solid var(--ht-line-strong);
+        color: var(--ht-ink-dim);
+      }
+      .reading hr {
+        margin: var(--ht-space-7) auto;
+        width: 4rem;
+        border: 0;
+        border-block-start: var(--ht-hairline) solid var(--ht-line-strong);
+      }
+      /* the sentence being spoken. Marked on the span the speech is reading,
+         so the highlight and the voice cannot disagree. */
+      .reading .s[data-speaking] {
+        background: var(--ht-ink-ghost);
+        box-shadow: 0 0 0 2px var(--ht-ink-ghost);
+        border-radius: 2px;
+      }
+      .reading .w[data-speaking] {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .pager {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--ht-space-4);
+        width: 100%;
+        max-width: var(--ht-measure);
+        margin: 0 auto;
+        padding: 0 var(--ht-space-5) var(--ht-space-9);
+      }
+
+      /* ---- read aloud --------------------------------------------------- */
+
+      .speech {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: var(--ht-space-3);
+        width: 100%;
+        padding: var(--ht-space-3) var(--ht-space-5);
+        background: var(--ht-paper);
+        border-block-start: var(--ht-hairline) solid var(--ht-line);
+      }
+      .speech__count {
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-faint);
+        font-variant-numeric: tabular-nums;
+        margin-inline-start: auto;
+      }
+
+      /* ---- plates ------------------------------------------------------- */
+
+      .plates {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+        gap: var(--ht-flow-section);
+        width: 100%;
+      }
+      .plate {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-3);
+      }
+      .plate img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: var(--ht-sunken);
+      }
+      .plate figcaption {
+        font-size: var(--ht-text-small);
+        line-height: var(--ht-leading-prose);
+        color: var(--ht-ink-dim);
+      }
+      .plate .credit {
+        color: var(--ht-ink-faint);
+        overflow-wrap: anywhere;
+      }
+      .plates-group-label {
+        grid-column: 1 / -1;
+      }
+
+      /* ---- settings ----------------------------------------------------- */
+      /* ui.css already dresses <dialog>, and it owns .field: a label with
+         flex-basis 6rem beside its control, centred on the cross axis.
+         Overriding that to a column turned both bases into *heights* — a
+         96px label stacked on a 96px control — which is what wrecked this
+         panel. So nothing here restyles either one. The markup uses .field
+         and .fieldset-stack the way the system means them, and this adds
+         only the space between the two groups. */
+
+      #prefs p:not(:first-child) {
+        margin-block-start: var(--ht-space-5);
+      }
+      .actions {
+        display: flex;
+        gap: var(--ht-space-2);
+        flex-wrap: wrap;
+      }
+    </style>
+  </head>
+  <body data-theme="auto" data-density="compact" data-view="shelf">
+    <!-- reading furniture: only present while a chapter is open -->
+    <header class="bar" id="bar" hidden>
+      <button class="ht-shape-control" id="btnShelf" type="button">
+        contents
+      </button>
+      <span class="bar__where">
+        <span class="bar__book" id="barBook"></span>
+        <span class="bar__chapter u-truncate" id="barChapter"></span>
+      </span>
+      <span class="bar__actions">
+        <button class="ht-shape-control" id="btnAloud" type="button">
+          read aloud
+        </button>
+        <button
+          class="ht-shape-control"
+          id="btnPrefs"
+          type="button"
+          title="reading settings"
+        >
+          Aa
+        </button>
+      </span>
+      <span class="bar__progress" id="barProgress" style="width: 0"></span>
+    </header>
+
+    <!-- ---- nothing loaded ------------------------------------------- -->
+    <!-- the shelf: the books that ship with this page, from manifest.js -->
+    <section id="viewShelf">
+      <h1><a href="../">stegassette</a>/books</h1>
+
+      <section id="shelf" hidden>
+        <div class="shelf-grid" id="shelfList"></div>
+      </section>
+      <p class="ht-type-small" id="status" role="status"></p>
+    </section>
+
+    <!-- ---- the book ------------------------------------------------- -->
+    <section id="viewBook" hidden>
+      <h1 id="bookTitle"></h1>
+
+      <div class="jacket">
+        <img id="bookCover" alt="" />
+        <div class="facts">
+          <p class="ht-type-prose" id="bookBlurb"></p>
+          <dl id="bookFacts"></dl>
+          <div class="actions">
+            <button
+              class="ht-shape-control"
+              id="btnRead"
+              type="button"
+              data-emphasis="strong"
+            >
+              read
+            </button>
+            <button class="ht-shape-control" id="btnPlates" type="button">
+              plates
+            </button>
+            <button class="ht-shape-control" id="btnEject" type="button">
+              eject
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <section>
+        <p class="ht-type-eyebrow">Contents</p>
+        <div class="toc" id="toc"></div>
+      </section>
+    </section>
+
+    <!-- ---- reading -------------------------------------------------- -->
+    <article class="reading" id="viewRead" hidden></article>
+    <nav class="pager" id="pager" hidden>
+      <button class="ht-shape-control" id="btnPrev" type="button">
+        previous
+      </button>
+      <button class="ht-shape-control" id="btnNext" type="button">next</button>
+    </nav>
+
+    <!-- ---- plates --------------------------------------------------- -->
+    <section id="viewPlates" hidden>
+      <h1 id="platesTitle">Plates</h1>
+      <div class="actions">
+        <button class="ht-shape-control" id="btnBackFromPlates" type="button">
+          back
+        </button>
+      </div>
+      <div class="plates" id="plates"></div>
+    </section>
+
+    <!-- ---- read aloud ----------------------------------------------- -->
+    <div class="speech" id="speech" hidden>
+      <button class="ht-shape-control" id="btnPlay" type="button">play</button>
+      <button class="ht-shape-control" id="btnBack" type="button">back</button>
+      <button class="ht-shape-control" id="btnFwd" type="button">
+        forward
+      </button>
+      <button class="ht-shape-control" id="btnStop" type="button">stop</button>
+      <span class="speech__count" id="speechCount"></span>
+    </div>
+
+    <!-- ---- settings -------------------------------------------------- -->
+    <dialog id="prefs">
+      <form method="dialog" class="fieldset-stack">
+        <p class="ht-type-eyebrow">Reading</p>
+
+        <div class="field">
+          <label for="prefFont">font</label>
+          <select id="prefFont">
+            <option value="mono">mono</option>
+            <option value="serif">serif</option>
+            <option value="sans">sans</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="prefSize">text size</label>
+          <input
+            id="prefSize"
+            type="range"
+            min="0.875"
+            max="1.5"
+            step="0.0625"
+          />
+        </div>
+        <div class="field">
+          <label for="prefLeading">line height</label>
+          <input
+            id="prefLeading"
+            type="range"
+            min="1.4"
+            max="2.1"
+            step="0.05"
+          />
+        </div>
+        <div class="field">
+          <label for="prefTheme">theme</label>
+          <select id="prefTheme">
+            <option value="auto">auto</option>
+            <option value="light">light</option>
+            <option value="dark">dark</option>
+          </select>
+        </div>
+
+        <p class="ht-type-eyebrow">Read aloud</p>
+        <div class="field">
+          <label for="prefVoice">voice</label>
+          <select id="prefVoice"></select>
+        </div>
+        <div class="field">
+          <label for="prefRate">rate</label>
+          <input id="prefRate" type="range" min="0.6" max="1.8" step="0.05" />
+        </div>
+
+        <div class="actions">
+          <button class="ht-shape-control" value="close" data-emphasis="strong">
+            done
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="../lib/stegassette.js"></script>
+    <script src="manifest.js"></script>
+    <script src="books.js"></script>
+  </body>
+</html>

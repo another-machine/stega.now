@@ -76,6 +76,10 @@ stegassette and deletes it with the stegassette.
 - [album](album/) — builds and plays albums. A track's song splits across
   one or more images. A cover stegassette holds metadata, ownership,
   timestamped lyrics, and the key that decrypts the tracks.
+- [books](books/) — reads a book out of its own cover. One stegassette holds
+  the whole thing: the record and table of contents, every chapter as
+  markdown, every plate, and the jacket. It keeps your place, sets the page
+  to taste, and reads aloud a sentence at a time with the sentence lit.
 - [home](home/) — the player and the stegassette library. It was `/`.
 - [inspect](inspect/) — a read-only report on stegassettes: the pattern,
   the entries, and the cover recovered from the key pixels.
