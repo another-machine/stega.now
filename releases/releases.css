@@ -167,7 +167,10 @@ progress {
   width: 100%;
   border: 0;
   background: none;
-  image-rendering: pixelated;
+  /* Display-only surface, always heavily downscaled: smoothing averages the
+     per-pixel checkerboard instead of nearest-neighbor phase-aliasing it,
+     which is what made the encode look like zoom-dependent blocks. */
+  image-rendering: auto;
 }
 #npReveal .np-reveal canvas.overlay {
   position: absolute;

@@ -70,6 +70,11 @@
     markStored();
   });
 
+  // URLs whose last fetch failed retry with cache: "reload" — the browser's
+  // disk cache can hold a response with the wrong CORS headers for hours,
+  // and only a reload fetch gets past it.
+  const retryReload = new Set();
+
   async function fetchBlob(url, expectedBytes, onProgress, signal) {
     const hit = await ReleaseStore.get(url);
     // A stored blob whose size disagrees with the manifest is from an older
@@ -78,8 +83,19 @@
       onProgress(1, hit.size, hit.size, true);
       return hit;
     }
-    const res = await fetch(url, { mode: "cors", signal });
+    let res;
+    try {
+      res = await fetch(url, {
+        mode: "cors",
+        signal,
+        cache: retryReload.has(url) ? "reload" : "default",
+      });
+    } catch (e) {
+      retryReload.add(url);
+      throw e;
+    }
     if (!res.ok) throw new Error(`download failed (HTTP ${res.status})`);
+    retryReload.delete(url);
     const total = Number(res.headers.get("content-length")) || expectedBytes || 0;
     let blob;
     if (res.body) {
