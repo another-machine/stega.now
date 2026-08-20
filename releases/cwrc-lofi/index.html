@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stegassette/releases/cwrc-lofi</title>
+    <link rel="stylesheet" href="../../ui.css" />
+    <link rel="stylesheet" href="../releases.css" />
+  </head>
+  <body data-theme="auto" data-density="compact" data-release="cwrc-lofi">
+    <h1>
+      <a href="/">Stegassette</a>/<wbr /><a href="../">Releases</a>
+    </h1>
+
+    <section id="meta">
+      <p class="status" id="coverStatus" data-state="busy">loading cover</p>
+      <progress id="coverProg" max="1" value="0"></progress>
+      <div id="metaBody" hidden></div>
+    </section>
+
+    <section id="np" hidden>
+      <p id="npTitle"></p>
+      <progress id="npProg" max="1" value="0" hidden></progress>
+      <p class="status" id="npStatus" data-state="busy" hidden></p>
+      <div id="npCtrls" hidden>
+        <button id="npToggle" type="button">play</button>
+        <input id="npSeek" type="range" min="0" max="1000" value="0" />
+        <span id="npTime" class="u-faint ht-type-small">0:00 / 0:00</span>
+      </div>
+      <div id="npReveal" hidden></div>
+      <div id="npLyrics" hidden></div>
+      <div id="npTexts" hidden></div>
+    </section>
+
+    <section>
+      <div id="grid" class="thumbs"></div>
+    </section>
+
+    <footer class="u-faint ht-type-small" id="storage"></footer>
+
+    <script src="../../lib/stegassette.js"></script>
+    <script src="../manifest.js"></script>
+    <script src="../store.js"></script>
+    <script src="../releases.js"></script>
+  </body>
+</html>

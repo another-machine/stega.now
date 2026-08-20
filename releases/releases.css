@@ -1,0 +1,204 @@
+/* Layout for the releases pages on top of amplib-ui. Values are tokens. */
+[hidden] {
+  display: none !important;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ht-flow);
+  padding: var(--ht-space-6);
+}
+section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ht-space-3);
+  width: 100%;
+}
+h1 a {
+  text-decoration: none;
+}
+h2 {
+  margin: 0;
+}
+p {
+  margin: 0;
+}
+
+/* index: one card per release */
+.covers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--ht-space-6);
+  width: 100%;
+  max-width: var(--ht-page-max);
+}
+.covers a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-2);
+  text-decoration: none;
+}
+.covers a:hover .covers__name {
+  text-decoration: underline;
+}
+.covers img {
+  width: 100%;
+  display: block;
+}
+/* the album cover: encoded by default, toggling to the decoded artwork */
+.cover-art {
+  display: block;
+  width: 100%;
+  max-width: 18rem;
+}
+.linklike {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: var(--ht-text-small);
+  color: var(--ht-ink-faint);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.linklike:hover {
+  color: var(--ht-ink);
+}
+
+/* release pages: the tappable grid of encoded images */
+.thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--ht-space-5);
+  width: 100%;
+  max-width: var(--ht-page-max);
+}
+.thumb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-2);
+}
+/* the face is the tappable part; the meta line under it stays outside the
+   button so it can carry a real link */
+.thumb__face {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-2);
+}
+.thumb img {
+  width: 100%;
+  display: block;
+}
+.thumb__face[aria-pressed="true"] img {
+  outline: 2px solid var(--ht-ink);
+  outline-offset: 2px;
+}
+.thumb__name {
+  overflow-wrap: anywhere;
+}
+
+/* player */
+#np {
+  border-top: var(--ht-hairline) solid var(--ht-line);
+  padding-top: var(--ht-flow);
+}
+#npCtrls {
+  display: flex;
+  align-items: center;
+  gap: var(--ht-space-4);
+  width: 100%;
+  max-width: var(--ht-measure);
+}
+#npSeek {
+  flex: 1;
+  min-width: 8rem;
+  touch-action: none; /* keep touch drags on the slider from becoming page scrolls */
+}
+#npTime {
+  white-space: nowrap;
+}
+progress {
+  width: 100%;
+  max-width: var(--ht-measure);
+}
+/* frames canvas and live develop sit side by side when there is room */
+#npReveal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--ht-space-5);
+  width: 100%;
+}
+
+/* video cartridge frames, drawn at native resolution and scaled up hard */
+#npReveal canvas.np-frames {
+  display: block;
+  flex: 1 1 26rem;
+  min-width: min(100%, 18rem);
+  max-width: 42rem;
+  height: auto;
+  border: 0;
+  background: none;
+  image-rendering: pixelated;
+}
+
+/* the live decode: reconstruction beneath, encoded pixels erased on top */
+#npReveal .np-reveal {
+  position: relative;
+  flex: 1 1 16rem;
+  min-width: min(100%, 12rem);
+  max-width: 24rem;
+}
+#npReveal .np-reveal canvas {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  image-rendering: pixelated;
+}
+#npReveal .np-reveal canvas.overlay {
+  position: absolute;
+  inset: 0;
+}
+
+#npLyrics {
+  white-space: pre-wrap;
+  max-height: 18rem;
+  overflow: auto;
+  max-width: var(--ht-measure);
+}
+#npLyrics.lyrics--timed {
+  white-space: normal;
+  color: var(--ht-ink-faint);
+}
+#npLyrics.lyrics--timed div.on {
+  color: var(--ht-ink);
+}
+#npLyrics.lyrics--timed span {
+  color: var(--ht-ink-faint);
+}
+#npLyrics.lyrics--timed div.on span.on {
+  color: var(--ht-ink);
+}
+#npTexts p,
+#metaBody p {
+  max-width: var(--ht-measure);
+  white-space: pre-wrap; /* decoded text entries carry real newlines */
+}
+
+footer {
+  margin-top: var(--ht-flow-section);
+}
