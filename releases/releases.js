@@ -316,6 +316,7 @@
   // ── player ────────────────────────────────────────────────────────────────
   const npSection = $("np");
   const npTitle = $("npTitle");
+  const npView = $("npView");
   const npStatus = $("npStatus");
   const npProg = $("npProg");
   const npCtrls = $("npCtrls");
@@ -595,6 +596,7 @@
       if (np.expected > 1) {
         pressThumb(np.parts[j].gridIdx);
         npTitle.textContent = itemLabel(np.parts[j].gridIdx);
+        npView.href = Releases.url(rel, rel.items[np.parts[j].gridIdx].file);
       }
     }
     // A loop wrap jumps the playhead backward; start the develop over.
@@ -719,6 +721,8 @@
     pressThumb(indices.length === 1 ? indices[0] : -1);
     npSection.hidden = false;
     npTitle.textContent = itemLabel(indices[0]);
+    npView.href = Releases.url(rel, rel.items[indices[0]].file);
+    npView.hidden = false;
     npStatus.hidden = false;
     npStatus.dataset.state = "busy";
     npProg.hidden = false;
