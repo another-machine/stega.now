@@ -30,110 +30,139 @@
 
     <link rel="stylesheet" href="../gallery.css" />
     <style>
-      /* Screen-specific pieces on top of amplib-gallery. Like live/, one work
-         hangs at a time above a rail of the rest. Unlike live/, the work is a
-         pair: the reveal on the left and the clip that same payload carries on
-         the right, running off one clock. Under them, the card the stegassette
-         also holds — the scene, the year, the quote, the message. Values are
-         tokens. */
+      /* Screen-specific pieces on top of amplib-gallery. Built on geese/: a
+         promenade of rooms, one work to a room, each picture hung at its own
+         native size against a veiled enlargement of itself. Tapping a picture
+         loads and plays it. What geese does not have is the rest of what these
+         pictures carry — the clip and the card — which share the room with the
+         work. Values are tokens. */
       :root {
-        /* darker than live/: the card reads over this backdrop, not just
-           imagery, and a bright veil swallows the text */
-        --gal-veil: blur(8px) brightness(12%);
+        --intro-width: 80%;
+        --gal-veil: blur(1rem) brightness(35%);
         --kid-gap: calc(var(--gal-pad) * 2);
-        /* a shorter rail than the gallery default, to leave the stage the
-           height it needs for two pictures and the card under them */
-        --gal-thumb: 110px;
+      }
+      @media (min-width: 1024px) {
+        :root {
+          --intro-width: 50%;
+        }
+      }
+      .gallery[data-axis="x"] > .placard {
+        align-items: start;
+        height: initial;
+        width: var(--intro-width);
       }
 
+      /* The room arranges itself around the shape of its picture, which is
+         known before anything decodes: a wide cover runs across the top with
+         the clip and the card beneath, a tall one stands beside them. */
       .room {
-        gap: var(--gal-pad);
-        padding-inline: var(--gal-pad);
+        gap: var(--kid-gap);
+        padding: var(--gal-pad);
+      }
+      .room[data-shape="tall"] {
+        flex-direction: row;
       }
 
-      /* The stage stacks: the reveal takes a line to itself, and under it the
-         clip sits beside the card. Collapsed to nothing until a year is
-         chosen, so the rail sits alone in the room at rest. */
-      .stage {
-        display: flex;
+      /* every picture announces the stegassette's native size, and the library
+         reads the --gal-work-* pair: nothing is ever shown larger than the
+         pixels it has, since those pixels are the subject */
+      .work :is(img, .rev) {
+        --gal-work-w: var(--og-width);
+        --gal-work-h: var(--og-height);
+        box-shadow: var(--gal-glow);
+      }
+      /* The button is the frame: it takes the picture's shape and is capped
+         at the stegassette's own pixels, so nothing is ever shown larger than
+         the pixels it has — those pixels are the subject. It has to be given
+         the edge the room is spending, width in a wide room and height in a
+         tall one, or it shrink-wraps whatever is inside and everything settles
+         at the thumbnail's size for want of anything else to resolve to. */
+      .work {
+        aspect-ratio: var(--og-width) / var(--og-height);
         flex: 1 1 auto;
-        flex-direction: column;
-        gap: var(--gal-pad);
         justify-content: center;
-        margin-top: var(--gal-pad);
-        min-height: 0;
-        overflow: hidden;
-        transition:
-          flex-grow var(--gal-duration) var(--gal-ease),
-          opacity var(--gal-duration) ease-in;
-        width: 100%;
-      }
-      .stage.hidden {
-        flex: 0 0 0;
-        margin-top: 0;
-        opacity: 0;
-      }
-
-      .pane {
-        align-items: center;
-        display: flex;
-        justify-content: center;
-        margin: 0;
+        max-height: min(100%, var(--og-height));
+        max-width: min(90%, var(--og-width));
         min-height: 0;
         min-width: 0;
       }
-
-      /* the reveal takes the width of the room and whatever height the line
-         under it leaves */
-      .pane.reveal {
-        flex: 1 1 auto;
+      .room[data-shape="wide"] .work {
         width: 100%;
       }
-      /* The decode surface is two stacked canvases that both fill the wrapper.
-         Letting the wrapper fill the pane and giving the canvases object-fit
-         keeps the picture undistorted at any pane shape — and keeps the two in
-         register, since they letterbox identically off one intrinsic size. */
-      .reveal > .rev {
+      .room[data-shape="tall"] .work {
         height: 100%;
-        position: relative;
+      }
+      /* Both the thumbnail and the decode surface letterbox the same picture
+         into that frame, so they land on the same pixels. Sizing either one by
+         a specified edge and clamping the other squashes it — a replaced box
+         only keeps its ratio while one edge is free. */
+      .work > img.thumb {
+        height: 100%;
+        object-fit: contain;
         width: 100%;
       }
-      .reveal > .rev > canvas {
+      /* the stegassette itself is the decode source, never a picture on the
+         page — the thumbnail stands in for it, at a size a browser can scale */
+      .work > img.media {
+        display: none;
+      }
+      /* The decode surface is two stacked canvases. It covers the button, the
+         thumbnail still holding the frame underneath — both letterbox the same
+         picture into the same box, so they land on the same pixels, and the
+         canvases stay in register with each other. */
+      .work > .rev {
+        inset: 0;
+        position: absolute;
+      }
+      .work > .rev > canvas {
         display: block;
         height: 100%;
         image-rendering: pixelated;
         left: 0;
+        max-height: none;
+        max-width: none;
         object-fit: contain;
         position: absolute;
         top: 0;
         width: 100%;
       }
-      /* the stand-in that holds the frame while the payload decodes */
-      .reveal > img {
-        image-rendering: pixelated;
-        max-height: 100%;
-        object-fit: contain;
-        width: 100%;
-      }
 
-      /* the line under the reveal: the clip, and the card beside it */
+      /* the clip and the card, once the picture has been played at least once */
       .lower {
         align-items: center;
         display: flex;
         flex: 0 0 auto;
         gap: var(--kid-gap);
         justify-content: center;
-        width: 100%;
+        max-width: 100%;
+      }
+      .room:not([data-ready]) .lower {
+        display: none;
+      }
+      .room[data-shape="tall"] .lower {
+        flex-direction: column;
+        width: min(38%, 30rem);
       }
 
-      /* the clip: 128px-wide stills out of the same payload, at 6fps. Its
-         height is the line's; the frames' own ratio sets the width. */
+      /* the clip: 128px-wide stills out of the same payload, at 6fps. Beside a
+         tall picture the column sets its width; under a wide one its own
+         height does, and the frames' ratio finds the rest. */
       .pane.film {
+        align-items: center;
         aspect-ratio: var(--film-share, 1.3333);
+        display: flex;
         flex: 0 0 auto;
-        height: clamp(160px, 34svh, 420px);
+        height: clamp(160px, 30svh, 420px);
+        justify-content: center;
+        margin: 0;
+        min-width: 0;
+      }
+      .room[data-shape="tall"] .pane.film {
+        height: auto;
+        width: 100%;
       }
       .film > canvas {
+        box-shadow: var(--gal-glow);
         display: block;
         height: 100%;
         image-rendering: pixelated;
@@ -180,59 +209,24 @@
         display: none;
       }
 
-      /* the rail fills the room until a work hangs; then it shrinks to a
-         strip and the unselected years fall back into deep dim */
-      .rail {
-        flex: 1 1 auto;
-      }
-      .rail .work > img {
-        filter: none;
-        transition: all var(--gal-duration) var(--gal-ease);
-      }
-      .rail .work img.media {
-        display: none;
-      }
-      .stage:not(.hidden) ~ .rail {
-        flex: 0 0 auto;
-      }
-      .stage:not(.hidden) ~ .rail .work:not([aria-pressed="true"]) > img {
-        filter: var(--gal-dim-deep);
-      }
-      .stage:not(.hidden) ~ .rail .work:not([aria-pressed="true"]) > img:hover {
-        filter: none;
-      }
-
-      /* placards run bigger here, as in live/ */
-      .placard {
-        align-items: center;
-        height: initial;
-        min-height: 100%;
-        padding: 4rem 0;
-      }
-      .placard h1 {
-        font-size: 4em;
-      }
-      .placard p {
-        font-size: 1.4em;
-      }
-      .placard p.body,
-      .placard p:last-child {
-        font-size: 1.1em;
-      }
-      .placard :is(h1, p) {
-        max-width: min(90%, 900px);
-      }
-
-      /* narrow: the clip drops under the reveal, and the rail keeps its
-         strip so both stay reachable without scrolling the room */
+      /* narrow: no room for a column of text beside a picture, whatever shape
+         the cover is — the room stacks and everything centres */
       @media (max-width: 800px) {
-        /* no room for a column of text beside a picture: the card drops under
-           the clip and both centre, as everything else on the page does */
-        .lower {
+        .room[data-shape="tall"] {
+          flex-direction: column;
+        }
+        .room[data-shape="tall"] .work {
+          height: auto;
+          width: 100%;
+        }
+        .lower,
+        .room[data-shape="tall"] .lower {
           flex-direction: column;
           gap: var(--gal-pad);
+          width: 100%;
         }
-        .pane.film {
+        .pane.film,
+        .room[data-shape="tall"] .pane.film {
           height: auto;
           width: 60%;
         }
@@ -244,14 +238,14 @@
     </style>
   </head>
   <body>
-    <main class="gallery">
+    <main class="gallery" data-axis="x">
       <section class="room placard">
         <h1>kiddo</h1>
         <p>five minutes of home video, held in five&nbsp;pictures.</p>
         <p class="body">
           each picture carries its own clip: the sound, the frames, and a note
           i wrote back to the kid in&nbsp;them. nothing here is a video file.
-          select a year and watch the picture come back as it&nbsp;plays.
+          tap a picture and watch it come back as it&nbsp;plays.
         </p>
         <p>
           tools provided by
@@ -259,112 +253,164 @@
         </p>
       </section>
 
-      <section class="room">
-        <div class="stage hidden">
-          <figure class="pane reveal">
-            <img alt="" aria-hidden="true" />
+      <section class="room" data-year="1992" data-shape="wide"
+        style="--og-width: 1368px; --og-height: 379px">
+        <button class="work" aria-pressed="false">
+          <img
+            class="thumb"
+            src="media/thumbs/1992.stegassette.jpg"
+            alt="Five tall frames of home video side by side: a small child in red moves through a dim room lit warm green and amber, turning and laughing in the last two. Heavy colored grain covers the whole strip."
+            height="277"
+            width="1000"
+          />
+          <img
+            class="media"
+            src="media/1992.stegassette.png"
+            aria-hidden="true"
+            height="379"
+            width="1368"
+            loading="lazy"
+          />
+        </button>
+        <div class="lower">
+          <figure class="pane film">
+            <canvas width="128" height="96"></canvas>
           </figure>
-
-          <div class="lower">
-            <figure class="pane film">
-              <canvas width="128" height="96"></canvas>
-            </figure>
-
-            <aside class="card hidden">
-              <p class="scene"></p>
-              <p class="year"></p>
-              <blockquote></blockquote>
-              <p class="message"></p>
-            </aside>
-          </div>
+          <aside class="card hidden">
+            <p class="scene"></p>
+            <p class="year"></p>
+            <blockquote></blockquote>
+            <p class="message"></p>
+          </aside>
         </div>
+      </section>
 
-        <nav class="rail">
-          <button class="work" aria-pressed="false">
-            <img
-              src="media/thumbs/1992.stegassette.jpg"
-              alt="Five tall frames of home video side by side: a small child in red moves through a dim room lit warm green and amber, turning and laughing in the last two. Heavy colored grain covers the whole strip."
-              height="277"
-              width="1000"
-            />
-            <img
-              class="media"
-              src="media/1992.stegassette.png"
-              aria-hidden="true"
-              height="379"
-              width="1368"
-              loading="lazy"
-            />
-          </button>
+      <section class="room" data-year="1994" data-shape="wide"
+        style="--og-width: 1391px; --og-height: 1034px">
+        <button class="work" aria-pressed="false">
+          <img
+            class="thumb"
+            src="media/thumbs/1994.stegassette.jpg"
+            alt="A boy leans out from behind a bedroom door beside a man holding him, both smiling at the camera. The door panel on the left is posterized into flat bands of orange, pink and magenta, and dense colored grain sits over the frame."
+            height="743"
+            width="1000"
+          />
+          <img
+            class="media"
+            src="media/1994.stegassette.png"
+            aria-hidden="true"
+            height="1034"
+            width="1391"
+            loading="lazy"
+          />
+        </button>
+        <div class="lower">
+          <figure class="pane film">
+            <canvas width="128" height="96"></canvas>
+          </figure>
+          <aside class="card hidden">
+            <p class="scene"></p>
+            <p class="year"></p>
+            <blockquote></blockquote>
+            <p class="message"></p>
+          </aside>
+        </div>
+      </section>
 
-          <button class="work" aria-pressed="false">
-            <img
-              src="media/thumbs/1994.stegassette.jpg"
-              alt="A boy leans out from behind a bedroom door beside a man holding him, both smiling at the camera. The door panel on the left is posterized into flat bands of orange, pink and magenta, and dense colored grain sits over the frame."
-              height="743"
-              width="1000"
-            />
-            <img
-              class="media"
-              src="media/1994.stegassette.png"
-              aria-hidden="true"
-              height="1034"
-              width="1391"
-              loading="lazy"
-            />
-          </button>
+      <section class="room" data-year="1995" data-shape="tall"
+        style="--og-width: 651px; --og-height: 756px">
+        <button class="work" aria-pressed="false">
+          <img
+            class="thumb"
+            src="media/thumbs/1995.stegassette.jpg"
+            alt="A three-by-three grid of the same boy in a dark shirt against a pale wall, talking to the camera with a different expression in every cell — mouth open, hand raised, head tipped down. Pink and yellow noise lies over all nine."
+            height="756"
+            width="651"
+          />
+          <img
+            class="media"
+            src="media/1995.stegassette.png"
+            aria-hidden="true"
+            height="756"
+            width="651"
+            loading="lazy"
+          />
+        </button>
+        <div class="lower">
+          <figure class="pane film">
+            <canvas width="128" height="96"></canvas>
+          </figure>
+          <aside class="card hidden">
+            <p class="scene"></p>
+            <p class="year"></p>
+            <blockquote></blockquote>
+            <p class="message"></p>
+          </aside>
+        </div>
+      </section>
 
-          <button class="work" aria-pressed="false">
-            <img
-              src="media/thumbs/1995.stegassette.jpg"
-              alt="A three-by-three grid of the same boy in a dark shirt against a pale wall, talking to the camera with a different expression in every cell — mouth open, hand raised, head tipped down. Pink and yellow noise lies over all nine."
-              height="756"
-              width="651"
-            />
-            <img
-              class="media"
-              src="media/1995.stegassette.png"
-              aria-hidden="true"
-              height="756"
-              width="651"
-              loading="lazy"
-            />
-          </button>
+      <section class="room" data-year="1997" data-shape="tall"
+        style="--og-width: 559px; --og-height: 806px">
+        <button class="work" aria-pressed="false">
+          <img
+            class="thumb"
+            src="media/thumbs/1997.stegassette.jpg"
+            alt="A dense sepia montage of many overlapping video frames of children in striped shirts, layered until the same few figures repeat down the picture like a crowd."
+            height="806"
+            width="559"
+          />
+          <img
+            class="media"
+            src="media/1997.stegassette.png"
+            aria-hidden="true"
+            height="806"
+            width="559"
+            loading="lazy"
+          />
+        </button>
+        <div class="lower">
+          <figure class="pane film">
+            <canvas width="128" height="96"></canvas>
+          </figure>
+          <aside class="card hidden">
+            <p class="scene"></p>
+            <p class="year"></p>
+            <blockquote></blockquote>
+            <p class="message"></p>
+          </aside>
+        </div>
+      </section>
 
-          <button class="work" aria-pressed="false">
-            <img
-              src="media/thumbs/1997.stegassette.jpg"
-              alt="A dense sepia montage of many overlapping video frames of children in striped shirts, layered until the same few figures repeat down the picture like a crowd."
-              height="806"
-              width="559"
-            />
-            <img
-              class="media"
-              src="media/1997.stegassette.png"
-              aria-hidden="true"
-              height="806"
-              width="559"
-              loading="lazy"
-            />
-          </button>
-
-          <button class="work" aria-pressed="false">
-            <img
-              src="media/thumbs/2002.stegassette.jpg"
-              alt="A wide collage of overlapping frames of a teenager playing a red electric bass. Hands, fretboard and face repeat across the picture in cool blues and warm skin tones."
-              height="432"
-              width="1000"
-            />
-            <img
-              class="media"
-              src="media/2002.stegassette.png"
-              aria-hidden="true"
-              height="583"
-              width="1351"
-              loading="lazy"
-            />
-          </button>
-        </nav>
+      <section class="room" data-year="2002" data-shape="wide"
+        style="--og-width: 1351px; --og-height: 583px">
+        <button class="work" aria-pressed="false">
+          <img
+            class="thumb"
+            src="media/thumbs/2002.stegassette.jpg"
+            alt="A wide collage of overlapping frames of a teenager playing a red electric bass. Hands, fretboard and face repeat across the picture in cool blues and warm skin tones."
+            height="432"
+            width="1000"
+          />
+          <img
+            class="media"
+            src="media/2002.stegassette.png"
+            aria-hidden="true"
+            height="583"
+            width="1351"
+            loading="lazy"
+          />
+        </button>
+        <div class="lower">
+          <figure class="pane film">
+            <canvas width="128" height="96"></canvas>
+          </figure>
+          <aside class="card hidden">
+            <p class="scene"></p>
+            <p class="year"></p>
+            <blockquote></blockquote>
+            <p class="message"></p>
+          </aside>
+        </div>
       </section>
 
       <section class="room placard">

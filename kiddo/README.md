@@ -6,15 +6,17 @@ Each stegassette holds the whole moment: the audio, a run of `frame-001…`
 JPEG stills at 6fps and 128px wide, and three text entries (`Metadata`,
 `Quote`, `Message`). There are no video or audio files on this page.
 
-The page follows `live/`: one work hangs at a time above a rail of the rest.
-It adds two things, both read out of the payload the reveal is already
-eating. The reveal takes a line to itself, and under it the clip plays beside
+The page is built on `geese/`: a promenade of rooms, one work to a room, each
+picture hung at its own native size against a veiled enlargement of itself.
+Tapping a picture loads and plays it. What geese does not have is the rest of
+what these pictures carry, which shares the room with the work: the clip, and
 the card — the scene, the year, the quote, and the note I wrote back to the
-kid in the picture. Narrower than 800px the card drops under the clip.
+kid in the picture.
 
-The clip's height is `.pane.film`'s `clamp()` in `index.html`, and the frames'
-own ratio finds its width. Raising it takes height from the reveal, since the
-two share the room.
+A room arranges itself around the shape of its cover, which `data-shape` in
+the markup states, since it is known before anything decodes. A wide cover
+runs across the top with the clip and the card beneath it; a tall one stands
+beside them. Narrower than 800px every room stacks and centres.
 
 The clip dissolves rather than cuts. Six frames a second is slow enough that
 a cut reads as a stutter, so each frame holds for the first part of its turn
