@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>stegassette: kiddo</title>
+
+    <meta property="og:title" content="kiddo" />
+    <meta
+      property="og:description"
+      content="five minutes of home video, held in five pictures."
+    />
+    <meta
+      property="og:image"
+      content="https://stega.now/kiddo/media/thumbs/1995.stegassette.jpg"
+    />
+    <meta property="og:url" content="https://stega.now/kiddo/" />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="kiddo" />
+    <meta
+      name="twitter:description"
+      content="five minutes of home video, held in five pictures."
+    />
+    <meta
+      name="twitter:image"
+      content="https://stega.now/kiddo/media/thumbs/1995.stegassette.jpg"
+    />
+
+    <link rel="stylesheet" href="../gallery.css" />
+    <style>
+      /* Screen-specific pieces on top of amplib-gallery. Like live/, one work
+         hangs at a time above a rail of the rest. Unlike live/, the work is a
+         pair: the reveal on the left and the clip that same payload carries on
+         the right, running off one clock. Under them, the card the stegassette
+         also holds — the scene, the year, the quote, the message. Values are
+         tokens. */
+      :root {
+        /* darker than live/: the card reads over this backdrop, not just
+           imagery, and a bright veil swallows the text */
+        --gal-veil: blur(8px) brightness(12%);
+        --kid-gap: calc(var(--gal-pad) * 2);
+        /* a shorter rail than the gallery default, to leave the stage the
+           height it needs for two pictures and the card under them */
+        --gal-thumb: 110px;
+      }
+
+      .room {
+        gap: var(--gal-pad);
+        padding-inline: var(--gal-pad);
+      }
+
+      /* stage: reveal and clip side by side. The room is a flex column, so
+         the stage takes the height the card and the rail leave it — that is
+         what makes the panes definite enough to bound a picture. Collapsed to
+         nothing until a year is chosen, so the rail sits alone at rest. */
+      .stage {
+        align-items: stretch;
+        display: flex;
+        flex: 1 1 auto;
+        gap: var(--kid-gap);
+        justify-content: center;
+        margin-top: var(--gal-pad);
+        min-height: 0;
+        overflow: hidden;
+        transition:
+          flex-grow var(--gal-duration) var(--gal-ease),
+          opacity var(--gal-duration) ease-in;
+        width: 100%;
+      }
+      .stage.hidden {
+        flex: 0 0 0;
+        margin-top: 0;
+        opacity: 0;
+      }
+
+      .pane {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        margin: 0;
+        min-height: 0;
+        min-width: 0;
+      }
+      /* the reveal takes the room it needs; the clip is the smaller sibling */
+      .pane.reveal {
+        flex: 3 1 0;
+      }
+      .pane.film {
+        flex: 1 1 0;
+        gap: 0.4em;
+      }
+
+      /* The decode surface is two stacked canvases that both fill the wrapper.
+         Letting the wrapper fill the pane and giving the canvases object-fit
+         keeps the picture undistorted at any pane shape — and keeps the two in
+         register, since they letterbox identically off one intrinsic size. */
+      .reveal > .rev {
+        height: 100%;
+        position: relative;
+        width: 100%;
+      }
+      .reveal > .rev > canvas {
+        display: block;
+        height: 100%;
+        image-rendering: pixelated;
+        left: 0;
+        object-fit: contain;
+        position: absolute;
+        top: 0;
+        width: 100%;
+      }
+      /* the stand-in that holds the frame while the payload decodes */
+      .reveal > img {
+        image-rendering: pixelated;
+        max-height: 100%;
+        object-fit: contain;
+        width: 100%;
+      }
+
+      /* the clip: 128px-wide stills out of the same payload, at 6fps */
+      .film > canvas {
+        background: var(--gal-paper);
+        display: block;
+        image-rendering: pixelated;
+        max-height: 100%;
+        max-width: 100%;
+        min-height: 0;
+        object-fit: contain;
+        width: 100%;
+      }
+      .film > figcaption {
+        font-size: 0.7em;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.1em;
+        opacity: 0.7;
+      }
+
+      /* the card: what the stegassette says about the moment it holds */
+      .card {
+        display: flex;
+        flex: 0 0 auto;
+        flex-direction: column;
+        gap: 0.35em;
+        max-width: min(90%, 800px);
+        text-align: center;
+        text-shadow: 0 1px 8px var(--gal-paper);
+        transition: opacity var(--gal-duration) ease-in;
+        width: 100%;
+      }
+      .card.hidden {
+        opacity: 0;
+      }
+      .card > * {
+        margin: 0;
+      }
+      .card > .scene {
+        font-size: 0.9em;
+        font-style: italic;
+      }
+      .card > .year {
+        font-size: 0.7em;
+        letter-spacing: 0.2em;
+      }
+      .card > blockquote {
+        font-size: 1.1em;
+        text-wrap: balance;
+      }
+      .card > .message {
+        font-size: 0.85em;
+        font-style: italic;
+        text-wrap: balance;
+      }
+      .card > .message:empty,
+      .card > blockquote:empty {
+        display: none;
+      }
+
+      /* the rail fills the room until a work hangs; then it shrinks to a
+         strip and the unselected years fall back into deep dim */
+      .rail {
+        flex: 1 1 auto;
+      }
+      .rail .work > img {
+        filter: none;
+        transition: all var(--gal-duration) var(--gal-ease);
+      }
+      .rail .work img.media {
+        display: none;
+      }
+      .stage:not(.hidden) ~ .rail {
+        flex: 0 0 auto;
+      }
+      .stage:not(.hidden) ~ .rail .work:not([aria-pressed="true"]) > img {
+        filter: var(--gal-dim-deep);
+      }
+      .stage:not(.hidden) ~ .rail .work:not([aria-pressed="true"]) > img:hover {
+        filter: none;
+      }
+
+      /* placards run bigger here, as in live/ */
+      .placard {
+        align-items: center;
+        height: initial;
+        min-height: 100%;
+        padding: 4rem 0;
+      }
+      .placard h1 {
+        font-size: 4em;
+      }
+      .placard p {
+        font-size: 1.4em;
+      }
+      .placard p.body,
+      .placard p:last-child {
+        font-size: 1.1em;
+      }
+      .placard :is(h1, p) {
+        max-width: min(90%, 900px);
+      }
+
+      /* narrow: the clip drops under the reveal, and the rail keeps its
+         strip so both stay reachable without scrolling the room */
+      @media (max-width: 800px) {
+        .stage {
+          flex-direction: column;
+          gap: var(--gal-pad);
+        }
+        /* Narrow the clip, not the pane. The panes stay stretched to the full
+           width, because the reveal sizes its surface from the pane — give the
+           pane a shrink-to-fit width and that surface resolves to zero. */
+        .pane.film {
+          flex: 0 0 auto;
+        }
+        .pane.film > canvas {
+          width: 40%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="room placard">
+        <h1>kiddo</h1>
+        <p>five minutes of home video, held in five&nbsp;pictures.</p>
+        <p class="body">
+          each picture carries its own clip: the sound, the frames, and a note
+          i wrote back to the kid in&nbsp;them. nothing here is a video file.
+          select a year and watch the picture come back as it&nbsp;plays.
+        </p>
+        <p>
+          tools provided by
+          <a href="https://anothermachine.info">another machine</a>.
+        </p>
+      </section>
+
+      <section class="room">
+        <div class="stage hidden">
+          <figure class="pane reveal">
+            <img alt="" aria-hidden="true" />
+          </figure>
+          <figure class="pane film">
+            <canvas width="128" height="96"></canvas>
+            <figcaption class="time">0:00 / 0:00</figcaption>
+          </figure>
+        </div>
+
+        <aside class="card hidden">
+          <p class="scene"></p>
+          <p class="year"></p>
+          <blockquote></blockquote>
+          <p class="message"></p>
+        </aside>
+
+        <nav class="rail">
+          <button class="work" aria-pressed="false">
+            <img
+              src="media/thumbs/1992.stegassette.jpg"
+              alt="Five tall frames of home video side by side: a small child in red moves through a dim room lit warm green and amber, turning and laughing in the last two. Heavy colored grain covers the whole strip."
+              height="277"
+              width="1000"
+            />
+            <img
+              class="media"
+              src="media/1992.stegassette.png"
+              aria-hidden="true"
+              height="379"
+              width="1368"
+              loading="lazy"
+            />
+          </button>
+
+          <button class="work" aria-pressed="false">
+            <img
+              src="media/thumbs/1994.stegassette.jpg"
+              alt="A boy leans out from behind a bedroom door beside a man holding him, both smiling at the camera. The door panel on the left is posterized into flat bands of orange, pink and magenta, and dense colored grain sits over the frame."
+              height="743"
+              width="1000"
+            />
+            <img
+              class="media"
+              src="media/1994.stegassette.png"
+              aria-hidden="true"
+              height="1034"
+              width="1391"
+              loading="lazy"
+            />
+          </button>
+
+          <button class="work" aria-pressed="false">
+            <img
+              src="media/thumbs/1995.stegassette.jpg"
+              alt="A three-by-three grid of the same boy in a dark shirt against a pale wall, talking to the camera with a different expression in every cell — mouth open, hand raised, head tipped down. Pink and yellow noise lies over all nine."
+              height="756"
+              width="651"
+            />
+            <img
+              class="media"
+              src="media/1995.stegassette.png"
+              aria-hidden="true"
+              height="756"
+              width="651"
+              loading="lazy"
+            />
+          </button>
+
+          <button class="work" aria-pressed="false">
+            <img
+              src="media/thumbs/1997.stegassette.jpg"
+              alt="A dense sepia montage of many overlapping video frames of children in striped shirts, layered until the same few figures repeat down the picture like a crowd."
+              height="806"
+              width="559"
+            />
+            <img
+              class="media"
+              src="media/1997.stegassette.png"
+              aria-hidden="true"
+              height="806"
+              width="559"
+              loading="lazy"
+            />
+          </button>
+
+          <button class="work" aria-pressed="false">
+            <img
+              src="media/thumbs/2002.stegassette.jpg"
+              alt="A wide collage of overlapping frames of a teenager playing a red electric bass. Hands, fretboard and face repeat across the picture in cool blues and warm skin tones."
+              height="432"
+              width="1000"
+            />
+            <img
+              class="media"
+              src="media/2002.stegassette.png"
+              aria-hidden="true"
+              height="583"
+              width="1351"
+              loading="lazy"
+            />
+          </button>
+        </nav>
+      </section>
+
+      <section class="room placard">
+        <p>
+          the pictures are the only files here. the sound, the frames of the
+          clip, and the text all live in their pixels, and the visible
+          distortion is that payload. reading it back develops the picture
+          again, in the order it was&nbsp;written.
+        </p>
+        <p>
+          the clips run at six frames a second, 128 pixels wide. that is what
+          fits — a picture holds what a picture&nbsp;holds.
+        </p>
+        <p>
+          my name is <a href="https://jake.fun">jake</a>, and i started
+          <a href="https://anothermachine.info">another machine</a> to create
+          interesting&nbsp;things.
+        </p>
+      </section>
+    </main>
+    <script src="../lib/stegassette.js"></script>
+    <script src="./index.js"></script>
+  </body>
+</html>
