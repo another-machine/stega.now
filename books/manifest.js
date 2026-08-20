@@ -9,7 +9,7 @@
 // what is here, and nothing that could drift from what is inside.
 "use strict";
 const Books = {
-  order: ["peekskill-usa"],
+  order: ["peekskill-usa", "american-indian-stories"],
   byId: {
     "peekskill-usa": {
       id: "peekskill-usa",
@@ -17,6 +17,13 @@ const Books = {
       bytes: 14551718,
       name: "Peekskill USA",
       line: "Howard Fast · Civil Rights Congress, 1951",
+    },
+    "american-indian-stories": {
+      id: "american-indian-stories",
+      file: "american-indian-stories.png",
+      bytes: 17037885,
+      name: "American Indian Stories",
+      line: "Zitkála-Šá · Hayworth Publishing House, 1921",
     },
   },
 

@@ -650,10 +650,14 @@ function renderShelf() {
     item.type = "button";
     item.className = "shelf-item";
 
+    // the box is the shelf the book stands on; the picture sits at its floor
+    const shelf = document.createElement("span");
+    shelf.className = "shelf-cover";
     const cover = document.createElement("img");
     cover.src = Books.thumb(b);
     cover.alt = `${b.name}, the encoded cover`;
     cover.loading = "lazy";
+    shelf.append(cover);
 
     const name = document.createElement("span");
     name.className = "shelf-name";
@@ -663,7 +667,7 @@ function renderShelf() {
     line.className = "shelf-line";
     line.textContent = `${b.line} · ${(b.bytes / 1048576).toFixed(1)} MB`;
 
-    item.append(cover, name, line);
+    item.append(shelf, name, line);
     item.addEventListener("click", () => fromUrl(b.file));
     list.append(item);
   }

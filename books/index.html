@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="../ui.css" />
     <style>
       /* Layout only — type, color and spacing are amplib-ui's. Same body rule
-         as /, /album and /inspect so every page shares the same left edge.
+         as / and /inspect so every page shares the same left edge.
          The reading view is the one exception, and it says so where it
          overrides this. */
       body {
@@ -91,9 +91,17 @@
         width: 100%;
         max-width: var(--ht-page-max);
       }
+      /* A tile is a <button>, and ui.css dresses every bare button as a
+         control: inline-flex, fit-content, centred, nowrap. That is right for
+         a control and wrong for a tile, so all four are undone here. Each one
+         breaks the shelf differently — fit-content makes the cover overflow
+         its grid track onto the next book, centred makes the caption size to
+         its text rather than the tile, and nowrap stops it wrapping at all. */
       .shelf-item {
         display: flex;
         flex-direction: column;
+        align-items: stretch;
+        white-space: normal;
         gap: var(--ht-space-3);
         padding: 0;
         border: 0;
@@ -102,10 +110,28 @@
         font: inherit;
         text-align: start;
         cursor: pointer;
-      }
-      .shelf-item img {
-        display: block;
         width: 100%;
+        min-width: 0;
+      }
+      /* Each cover gets a box of the same height and stands on its floor, so
+         the books sit on one shelf line and the names under them agree. The
+         picture keeps its own proportions inside that box — a stegassette is
+         a fixed shape, and cropping one to tidy a grid would be the wrong
+         trade. The box is what varies; the image is never distorted.
+         The shadow goes on the image rather than the box, so it hugs the
+         picture instead of tracing empty space above a shorter one. */
+      .shelf-cover {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        width: 100%;
+        aspect-ratio: 2 / 3;
+      }
+      .shelf-cover img {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
         height: auto;
         background: var(--ht-sunken);
         box-shadow: var(--ht-raised);
