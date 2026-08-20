@@ -14,9 +14,9 @@
 const stage = document.querySelector(".stage");
 const revealPane = stage.querySelector(".pane.reveal");
 const standin = revealPane.querySelector("img");
-const film = stage.querySelector(".pane.film canvas");
+const filmPane = stage.querySelector(".pane.film");
+const film = filmPane.querySelector("canvas");
 const filmCtx = film.getContext("2d");
-const timeEl = stage.querySelector(".time");
 const card = document.querySelector(".card");
 const cardScene = card.querySelector(".scene");
 const cardYear = card.querySelector(".year");
@@ -71,9 +71,6 @@ async function loadFrames(entries) {
 // end to end and never holds a frame still.
 const FADE = 0.5;
 
-const clock = (s) =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
 // ease the ramp: a linear dissolve reads as a lurch through its midpoint
 const smoothstep = (x) => x * x * (3 - 2 * x);
 
@@ -115,7 +112,6 @@ function runFilm(rec) {
       i,
       FADE > 0 ? smoothstep(Math.min(1, Math.max(0, (into - 1 + FADE) / FADE))) : 0,
     );
-    timeEl.textContent = `${clock(at)} / ${clock(player.duration)}`;
     rec.raf = requestAnimationFrame(tick);
   };
   rec.raf = requestAnimationFrame(tick);
@@ -126,6 +122,15 @@ function stopFilm(rec) {
     cancelAnimationFrame(rec.raf);
     rec.raf = null;
   }
+}
+
+// Give each pane the width its picture needs at the stage's full height —
+// its aspect ratio. Both then stand the same height with no column to spare,
+// whatever shape the cover is: 1992 is wider than three of itself is tall,
+// 1997 is taller than it is wide, and one fixed ratio cannot serve both.
+function shareTheStage(rec) {
+  stage.style.setProperty("--reveal-share", rec.player.width / rec.player.height);
+  stage.style.setProperty("--film-share", film.width / film.height);
 }
 
 // ── selection ───────────────────────────────────────────────────────────────
@@ -230,11 +235,8 @@ document.querySelectorAll("nav.rail button").forEach((button) => {
     if (!rec.player.element.isConnected) revealPane.appendChild(rec.player.element);
     standin.hidden = true;
 
-    // seed the pane before the clock exists: first still, zeroed readout. The
-    // loop only writes the readout on its first frame, and that is a frame
-    // away — long enough to show the previous work's time.
+    shareTheStage(rec);
     paint(rec, 0, 0);
-    timeEl.textContent = `0:00 / ${clock(rec.player.duration)}`;
     showCard(rec.player.entries);
 
     current = rec;

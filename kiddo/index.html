@@ -75,22 +75,28 @@
         opacity: 0;
       }
 
+      /* Both pictures stand at the stage's full height, so a pane is exactly
+         as wide as its picture is there: give the pane the picture's own
+         aspect ratio and it takes no more. The script sets the pair when a
+         year is chosen. Shares rather than ratios left each pane wider than
+         its picture, and the leftover opened as a gap down the middle. */
       .pane {
         align-items: center;
         display: flex;
+        flex: 0 1 auto;
         flex-direction: column;
+        height: 100%;
         justify-content: center;
         margin: 0;
         min-height: 0;
         min-width: 0;
+        width: auto;
       }
-      /* the reveal takes the room it needs; the clip is the smaller sibling */
       .pane.reveal {
-        flex: 3 1 0;
+        aspect-ratio: var(--reveal-share, 3);
       }
       .pane.film {
-        flex: 1 1 0;
-        gap: 0.4em;
+        aspect-ratio: var(--film-share, 1.3333);
       }
 
       /* The decode surface is two stacked canvases that both fill the wrapper.
@@ -122,22 +128,12 @@
 
       /* the clip: 128px-wide stills out of the same payload, at 6fps */
       .film > canvas {
-        background: var(--gal-paper);
         display: block;
+        height: 100%;
         image-rendering: pixelated;
-        max-height: 100%;
-        max-width: 100%;
-        min-height: 0;
         object-fit: contain;
         width: 100%;
       }
-      .film > figcaption {
-        font-size: 0.7em;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.1em;
-        opacity: 0.7;
-      }
-
       /* the card: what the stegassette says about the moment it holds */
       .card {
         display: flex;
@@ -228,14 +224,28 @@
           flex-direction: column;
           gap: var(--gal-pad);
         }
-        /* Narrow the clip, not the pane. The panes stay stretched to the full
-           width, because the reveal sizes its surface from the pane — give the
-           pane a shrink-to-fit width and that surface resolves to zero. */
+        /* Stacked, the panes run the full width and the column shares out the
+           height, so the aspect-ratio sizing has nothing to do. Narrow the
+           clip itself, not its pane: give the pane a shrink-to-fit width and
+           the reveal surface it sizes resolves to zero. */
+        /* both selectors, not `.pane`: the aspect-ratio sizing above is set on
+           `.pane.reveal` and `.pane.film`, and a later rule does not win on
+           order alone when the earlier one is more specific */
+        .pane.reveal,
+        .pane.film {
+          aspect-ratio: auto;
+          height: auto;
+          width: 100%;
+        }
+        .pane.reveal {
+          flex: 1 1 auto;
+        }
         .pane.film {
           flex: 0 0 auto;
         }
         .pane.film > canvas {
-          width: 40%;
+          height: auto;
+          width: 60%;
         }
       }
     </style>
@@ -263,7 +273,6 @@
           </figure>
           <figure class="pane film">
             <canvas width="128" height="96"></canvas>
-            <figcaption class="time">0:00 / 0:00</figcaption>
           </figure>
         </div>
 
