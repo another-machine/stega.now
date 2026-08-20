@@ -212,7 +212,27 @@
   const coverProg = $("coverProg");
   const metaBody = $("metaBody");
 
+  // The page shows the encoded thumbnail right away; the full cover download
+  // replaces it once decoded, and a failure leaves a tappable retry.
+  let coverLoading = false;
+  function initAlbum() {
+    const thumb = document.createElement("img");
+    thumb.id = "coverThumb";
+    thumb.className = "cover-art";
+    thumb.alt = "";
+    thumb.src = Releases.thumb(rel, rel.cover.file);
+    coverStatus.parentNode.insertBefore(thumb, coverStatus);
+    loadCover();
+  }
+
   async function loadCover() {
+    if (coverLoading) return;
+    coverLoading = true;
+    coverStatus.hidden = false;
+    coverStatus.dataset.state = "busy";
+    coverStatus.textContent = "loading cover";
+    coverProg.hidden = false;
+    coverProg.value = 0;
     const url = Releases.url(rel, rel.cover.file);
     try {
       const blob = await fetchBlob(url, rel.cover.bytes, (frac, got, total, fromStore) => {
@@ -231,13 +251,23 @@
       if (album.encrypted && album.key) albumKey = await Stegassette.importKey(album.key);
       renderAlbumMeta(entries);
       refreshLabels();
+      const thumb = $("coverThumb");
+      if (thumb) thumb.remove();
       coverStatus.hidden = true;
       coverProg.hidden = true;
       metaBody.hidden = false;
     } catch (e) {
       coverProg.hidden = true;
       coverStatus.dataset.state = "error";
-      coverStatus.textContent = `cover: ${e.message}`;
+      coverStatus.textContent = `cover: ${e.message} — `;
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "linklike";
+      retry.textContent = rel.encrypted ? "load cover to decrypt" : "load the cover";
+      retry.addEventListener("click", loadCover);
+      coverStatus.append(retry);
+    } finally {
+      coverLoading = false;
     }
   }
 
@@ -858,5 +888,5 @@
     });
   }
 
-  if (rel.kind === "album") loadCover();
+  if (rel.kind === "album") initAlbum();
 })();

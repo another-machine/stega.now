@@ -33,6 +33,7 @@ const Releases = {
     cwrc: {
       id: "cwrc",
       kind: "album",
+      encrypted: true,
       name: "cameron winter at rockefeller chapel",
       line: "16-bit stereo · encrypted",
       prefix: "cwrc",
