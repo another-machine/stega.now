@@ -40,6 +40,17 @@ p {
   gap: var(--ht-space-2);
   text-decoration: none;
 }
+/* Block cards, not inline links: keep the system's ink-inversion hover off
+   them (it paints the whole grid cell) and mark hover like a selected thumb —
+   an outline on the image, an underline on the name. */
+.covers a:hover {
+  background: none;
+  color: inherit;
+}
+.covers a:hover img {
+  outline: 2px solid var(--ht-ink);
+  outline-offset: 2px;
+}
 .covers a:hover .covers__name {
   text-decoration: underline;
 }
@@ -102,9 +113,17 @@ p {
   width: 100%;
   display: block;
 }
+.thumb__face:hover {
+  background: none;
+  color: inherit;
+}
+.thumb__face:hover img,
 .thumb__face[aria-pressed="true"] img {
   outline: 2px solid var(--ht-ink);
   outline-offset: 2px;
+}
+.thumb__face:hover .thumb__name {
+  text-decoration: underline;
 }
 .thumb__name {
   overflow-wrap: anywhere;
