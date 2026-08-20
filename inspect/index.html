@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stegassette/inspect</title>
+    <link rel="stylesheet" href="../ui.css" />
+    <style>
+      /* Layout only — type, color and spacing are amplib-ui's. Same body rule
+         as /, /home and /make so everything shares the same left edge. */
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        width: 100%;
+      }
+      h1 a {
+        text-decoration: none;
+      }
+
+      /* the key fold: secondary on purpose — most stegassettes need no key */
+      #keybox {
+        width: 100%;
+      }
+      #keybox summary {
+        cursor: pointer;
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-faint);
+        user-select: none;
+      }
+      #keybox[open] summary {
+        color: var(--ht-ink-dim);
+      }
+      #keybox .fold {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-3);
+        padding-block-start: var(--ht-space-3);
+      }
+      #keyText {
+        flex: 1 1 16rem;
+      }
+
+      /* report panels: one per inspected file */
+      .report {
+        width: 100%;
+      }
+      /* File names keep their case — .panel__header's eyebrow uppercasing
+         would erase it, and a PNG name is case-sensitive data here. */
+      .report .panel__header {
+        text-transform: none;
+        letter-spacing: var(--ht-track-none);
+        font-family: var(--ht-font-mono);
+        color: var(--ht-ink-dim);
+        overflow-wrap: anywhere;
+      }
+      .report .panel__header .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-2);
+      }
+
+      .previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-4);
+        align-items: flex-start;
+      }
+      .previews img,
+      .previews canvas {
+        display: block;
+        max-width: 220px;
+        max-height: 220px;
+        width: auto;
+        height: auto;
+        image-rendering: pixelated;
+        border: var(--ht-hairline) solid var(--ht-line);
+      }
+
+      .facts {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: var(--ht-space-1) var(--ht-space-4);
+        margin: 0;
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+      }
+      .facts dt {
+        color: var(--ht-ink-faint);
+      }
+      .facts dd {
+        margin: 0;
+        color: var(--ht-ink-dim);
+        overflow-wrap: anywhere;
+        min-inline-size: 0;
+      }
+      .facts .meter {
+        max-inline-size: 16rem;
+      }
+
+      /* one hidden entry */
+      .entry {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-2);
+        border-block-start: var(--ht-hairline) solid var(--ht-line);
+        padding-block-start: var(--ht-space-3);
+        width: 100%;
+      }
+      .entry .ehead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ht-space-2);
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink);
+        overflow-wrap: anywhere;
+        min-inline-size: 0;
+      }
+      .entry img {
+        display: block;
+        max-width: 220px;
+        max-height: 220px;
+        width: auto;
+        height: auto;
+        image-rendering: pixelated;
+        border: var(--ht-hairline) solid var(--ht-line);
+      }
+      .entry .note {
+        font-size: var(--ht-text-small);
+        color: var(--ht-ink-faint);
+      }
+    </style>
+  </head>
+  <body data-theme="auto" data-density="compact">
+    <h1><a href="/">Stegassette</a>/<wbr />Inspect</h1>
+
+    <section>
+      <p class="ht-type-prose u-dim">
+        open stegassettes and see their contents and metadata. runs entirely in
+        the browser. nothing is uploaded to the internet.
+      </p>
+
+      <div id="drop" class="drop" tabindex="0" role="button">
+        <span class="drop__label">drop stegassettes</span>
+        <span class="drop__sub">PNG · one or more · or click to browse</span>
+      </div>
+      <input id="file" type="file" accept="image/png,image/*" multiple hidden />
+
+      <details id="keybox">
+        <summary>key — for encrypted entries</summary>
+        <div class="fold">
+          <p class="ht-type-small u-dim">
+            some stegassettes encrypt their entries; an album keeps the key in
+            its cover. drop the cover with the parts and they unlock on their
+            own, or paste the base64 key, or load a file that holds one. keys
+            stay on this page.
+          </p>
+          <div class="ht-arrange-row">
+            <input id="keyText" type="text" placeholder="base64 key" />
+            <button id="keyAdd">add</button>
+            <button id="keyFileBtn">key file</button>
+            <input id="keyFile" type="file" hidden />
+          </div>
+          <div id="keyList" class="ht-arrange-row"></div>
+        </div>
+      </details>
+
+      <p id="err" class="status"></p>
+    </section>
+
+    <section id="reports"></section>
+
+    <div class="ht-arrange-row">
+      <button id="clear" hidden>clear</button>
+    </div>
+
+    <script src="../lib/stegassette.js"></script>
+    <script>
+      "use strict";
+      /* ==========================================================
+         stegassette/inspect — read-only report on STGC stegassettes.
+         Every file gets a panel: the image, the cover reconstructed
+         from its key pixels, the header the border ring carries
+         (border, combine, keymap, traversal, plan), and each entry
+         with a preview and a download. Nothing is stored anywhere.
+
+         Encryption is app-layer in the format: an album's part.json
+         says encrypted:true and carries the iv, and the album cover's
+         album.json carries the AES-GCM key. Any JSON entry that holds
+         a 32-byte base64 under a key-named field joins the key ring,
+         so dropping a cover unlocks the parts dropped with it — or
+         after it, via the retry list below.
+         ========================================================== */
+
+      const $ = (id) => document.getElementById(id);
+      const dec = new TextDecoder();
+
+      const keys = []; // { b64, label, key } — the key ring
+      const locked = []; // { box, entry, iv } — waiting on a key
+      const blobUrls = [];
+
+      function el(tag, cls, text) {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+      }
+      function setStatus(msg, state) {
+        const s = $("err");
+        s.textContent = msg || "";
+        if (state) s.dataset.state = state;
+        else delete s.dataset.state;
+      }
+      function fmtBytes(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+        return (n / 1048576).toFixed(2) + " MB";
+      }
+      function fmtTime(s) {
+        s = Math.max(0, Math.round(s));
+        return ((s / 60) | 0) + ":" + String(s % 60).padStart(2, "0");
+      }
+
+      // ---- decode -------------------------------------------------
+      async function toImg(bytes) {
+        const blob = new Blob([bytes], { type: "image/png" });
+        let bmp;
+        try {
+          bmp = await createImageBitmap(blob, { colorSpaceConversion: "none" });
+        } catch (_) {
+          bmp = await createImageBitmap(blob);
+        }
+        const W = bmp.width,
+          H = bmp.height;
+        const cnv = Object.assign(document.createElement("canvas"), {
+          width: W,
+          height: H,
+        });
+        const ctx = cnv.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        const px = ctx.getImageData(0, 0, W, H).data;
+        return new Stegassette.Img(W, H, new Uint8Array(px));
+      }
+
+      function kindOf(mimetype) {
+        const m = (mimetype || "").toLowerCase();
+        if (m.startsWith("text/html")) return "html";
+        if (m.startsWith("audio/l")) return "pcm";
+        if (m.startsWith("audio/")) return "audio";
+        if (m.startsWith("image/")) return "image";
+        if (m.startsWith("text/") || m.includes("json")) return "text";
+        return "file";
+      }
+      // Parse an entry as JSON if it plausibly is JSON — text-typed and
+      // small. Binary entries never get fed to JSON.parse.
+      function asJson(e) {
+        if (kindOf(e.mimetype) !== "text" && !/\.json$/i.test(e.name || ""))
+          return null;
+        if (e.data.length > 1 << 20) return null;
+        try {
+          const j = JSON.parse(dec.decode(e.data));
+          return j && typeof j === "object" ? j : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      // ---- key ring -----------------------------------------------
+      function keyBytesFrom(s) {
+        try {
+          const u8 = Stegassette.fromBase64(String(s).trim());
+          return u8.length === 32 ? u8 : null;
+        } catch (_) {
+          return null;
+        }
+      }
+      async function registerKey(b64, label) {
+        b64 = String(b64).trim();
+        if (!keyBytesFrom(b64)) return false;
+        if (!keys.some((k) => k.b64 === b64)) {
+          keys.push({ b64, label, key: await Stegassette.importKey(b64) });
+          renderKeys();
+          await retryLocked();
+        }
+        return true;
+      }
+      // Deep-scan parsed JSON for key material: a string under a field
+      // named like a key that decodes to 32 bytes. album.json's `key`
+      // matches; `keymap: "adjacent"` does not decode, so it never can.
+      function hasKeyField(obj) {
+        if (!obj || typeof obj !== "object") return false;
+        return Object.entries(obj).some(([k, v]) =>
+          typeof v === "string"
+            ? /key/i.test(k) && !!keyBytesFrom(v)
+            : hasKeyField(v),
+        );
+      }
+      async function scanKeys(obj, label) {
+        if (!obj || typeof obj !== "object") return 0;
+        let found = 0;
+        for (const [k, v] of Object.entries(obj)) {
+          if (typeof v === "string") {
+            if (
+              /key/i.test(k) &&
+              keyBytesFrom(v) &&
+              (await registerKey(v, label))
+            )
+              found++;
+          } else if (v && typeof v === "object")
+            found += await scanKeys(v, label);
+        }
+        return found;
+      }
+      function renderKeys() {
+        const list = $("keyList");
+        list.innerHTML = "";
+        for (const k of keys) {
+          const b = el(
+            "span",
+            "badge",
+            k.label + " · " + k.b64.slice(0, 8) + "…",
+          );
+          b.title = k.b64;
+          list.appendChild(b);
+        }
+        if (keys.length) $("keybox").open = true;
+      }
+      async function tryDecrypt(iv, data) {
+        for (const k of keys) {
+          try {
+            return {
+              clear: await Stegassette.decryptBytes(k.key, iv, data),
+              via: k,
+            };
+          } catch (_) {
+            // wrong key — AES-GCM authentication refuses it
+          }
+        }
+        return null;
+      }
+      async function retryLocked() {
+        for (let i = locked.length - 1; i >= 0; i--) {
+          const L = locked[i];
+          const hit = await tryDecrypt(L.iv, L.entry.data);
+          if (!hit) continue;
+          locked.splice(i, 1);
+          L.box.replaceChildren();
+          fillDecrypted(L.box, L.entry, hit);
+        }
+      }
+
+      // ---- rendering pieces ---------------------------------------
+      function fact(dl, k, v) {
+        dl.append(el("dt", null, k), el("dd", null, v));
+      }
+      function dlLink(name, data, mimetype, label) {
+        const a = document.createElement("a");
+        const url = URL.createObjectURL(
+          new Blob([data], { type: mimetype || "application/octet-stream" }),
+        );
+        blobUrls.push(url);
+        a.href = url;
+        a.download = name || "entry.bin";
+        a.textContent = label || "download";
+        return a;
+      }
+      function codeBlock(text, max) {
+        max = max || 4000;
+        const c = el("code", "code");
+        c.textContent =
+          text.length > max
+            ? text.slice(0, max) +
+              "\n… " +
+              (text.length - max) +
+              " more characters — download for all"
+            : text;
+        return c;
+      }
+      function hexPeek(u8, n) {
+        n = Math.min(n || 96, u8.length);
+        const rows = [];
+        for (let o = 0; o < n; o += 16) {
+          const row = Array.from(u8.subarray(o, o + 16));
+          const hex = row.map((b) => b.toString(16).padStart(2, "0")).join(" ");
+          const asc = row
+            .map((b) => (b >= 32 && b < 127 ? String.fromCharCode(b) : "·"))
+            .join("");
+          rows.push(hex.padEnd(47) + "  " + asc);
+        }
+        if (u8.length > n) rows.push("… " + fmtBytes(u8.length - n) + " more");
+        return codeBlock(rows.join("\n"));
+      }
+      function pcmFacts(mimetype, byteLen) {
+        const f = Stegassette.parseAudioMime(mimetype);
+        const frames = byteLen / (f.bits / 8) / f.channels;
+        return (
+          f.bits +
+          "-bit " +
+          f.rate +
+          " Hz × " +
+          f.channels +
+          "ch " +
+          f.layout +
+          " · " +
+          fmtTime(frames / f.rate)
+        );
+      }
+      function travStr(o) {
+        const p = o.params || {};
+        let s = o.traversal;
+        if (o.traversal === "fisher-yates" && p.seed != null)
+          s += " seed=" + p.seed;
+        if (o.traversal === "angle")
+          s += " a=" + (p.a ?? 1) + " b=" + (p.b ?? 1);
+        if (o.traversal === "radial")
+          s += " direction=" + (p.direction || "out");
+        if (o.traversal === "spiral" && p.rotation === "ccw")
+          s += " rotation=ccw";
+        return s;
+      }
+      function keymapStr(o) {
+        let s = o.keymap;
+        if (o.keymap === "offset")
+          s +=
+            " kx=" +
+            ((o.params || {}).kx | 0) +
+            " ky=" +
+            ((o.params || {}).ky | 0);
+        return (
+          s +
+          (Stegassette.isKeylessKeymap(o.keymap)
+            ? " · keyless"
+            : " · key pixel")
+        );
+      }
+
+      // The payload of a decrypted (or plain) entry, rendered by kind.
+      function kindDetail(box, mimetype, name, data) {
+        const kind = kindOf(mimetype);
+        if (kind === "pcm") {
+          box.appendChild(
+            el(
+              "p",
+              "note",
+              "raw PCM · " +
+                pcmFacts(mimetype, data.length) +
+                " — plays in home",
+            ),
+          );
+        } else if (kind === "text" || kind === "html") {
+          const j = asJson({ mimetype, name, data });
+          box.appendChild(
+            codeBlock(j ? JSON.stringify(j, null, 2) : dec.decode(data)),
+          );
+        } else if (kind === "image") {
+          const img = document.createElement("img");
+          const url = URL.createObjectURL(new Blob([data], { type: mimetype }));
+          blobUrls.push(url);
+          img.src = url;
+          img.alt = name || "image entry";
+          box.appendChild(img);
+        } else {
+          box.appendChild(hexPeek(data));
+        }
+      }
+      function fillDecrypted(box, entry, hit) {
+        box.appendChild(
+          el(
+            "p",
+            "note",
+            "decrypted with the key from " +
+              hit.via.label +
+              " · " +
+              fmtBytes(hit.clear.length),
+          ),
+        );
+        kindDetail(box, entry.mimetype, entry.name, hit.clear);
+        box.appendChild(
+          dlLink(entry.name, hit.clear, entry.mimetype, "download decrypted"),
+        );
+      }
+
+      // ---- the report ---------------------------------------------
+      async function report(rec) {
+        const panel = el("div", "panel report");
+        const head = el("div", "panel__header");
+        head.appendChild(el("span", null, rec.name));
+        const badges = el("span", "badges");
+        head.appendChild(badges);
+        const body = el("div", "panel__body");
+        panel.append(head, body);
+
+        const o = rec.opts || rec.header || null;
+
+        const verdict = el("span", "badge");
+        if (o) {
+          verdict.dataset.emphasis = "strong";
+          verdict.textContent = "stegassette";
+        } else {
+          verdict.dataset.emphasis = "quiet";
+          verdict.textContent = "not a stegassette";
+        }
+        if (rec.img)
+          badges.appendChild(
+            el("span", "badge", rec.img.width + "×" + rec.img.height),
+          );
+        badges.appendChild(el("span", "badge", fmtBytes(rec.size)));
+        badges.appendChild(verdict);
+
+        if (rec.readError) {
+          body.appendChild(
+            el(
+              "p",
+              "note",
+              "could not read this file as an image: " + rec.readError,
+            ),
+          );
+          return panel;
+        }
+
+        // previews: the file itself, and the cover its key pixels hold
+        const previews = el("div", "previews");
+        const f1 = el("div", "frame");
+        const img = document.createElement("img");
+        const url = URL.createObjectURL(rec.blob);
+        blobUrls.push(url);
+        img.src = url;
+        img.alt = rec.name;
+        f1.append(img, el("p", "frame__caption", "as encoded"));
+        previews.appendChild(f1);
+        if (o && !Stegassette.isKeylessKeymap(o.keymap)) {
+          try {
+            const rc = Stegassette.reconstructCover(rec.img, o);
+            const f2 = el("div", "frame");
+            f2.append(
+              Stegassette.canvasFromImageData(rc),
+              el("p", "frame__caption", "cover recovered from key pixels"),
+            );
+            previews.appendChild(f2);
+          } catch (_) {
+            // a cover preview is a bonus, never a failure
+          }
+        }
+        body.appendChild(previews);
+
+        if (!o) {
+          body.appendChild(
+            el(
+              "p",
+              "note",
+              "no STGC header in this image — it is not a stegassette, or its pixels were changed after encoding (resized, or re-saved as a lossy format).",
+            ),
+          );
+          return panel;
+        }
+
+        // the header the border ring carries
+        const facts = el("dl", "facts");
+        const B = o.borderWidth;
+        const IW = rec.img.width - 2 * B,
+          IH = rec.img.height - 2 * B;
+        const keyless = Stegassette.isKeylessKeymap(o.keymap);
+        if (rec.header && rec.header.version != null)
+          fact(facts, "format", "STGC v" + rec.header.version);
+        fact(facts, "border", B + " px · interior " + IW + "×" + IH);
+        fact(facts, "combine", Stegassette.serializeChannelPlan(o.plan.slots));
+        fact(
+          facts,
+          "packing",
+          o.pack +
+            " · " +
+            (o.plan.bytesPerPixel || 3) +
+            " B/px" +
+            (o.plan.pad ? " · pad " + o.plan.pad : ""),
+        );
+        fact(facts, "keymap", keymapStr(o));
+        fact(facts, "traversal", travStr(o));
+        const cap =
+          Stegassette.compactFit(IW, IH, keyless) * (o.plan.bytesPerPixel || 3);
+        fact(
+          facts,
+          "payload",
+          fmtBytes(o.interiorByteLength) +
+            " of " +
+            fmtBytes(cap) +
+            " (" +
+            Math.round((o.interiorByteLength / cap) * 100) +
+            "% of the interior)",
+        );
+        const dd = el("dd");
+        const meter = el("span", "meter");
+        const fill = el("span", "meter__fill");
+        fill.style.setProperty(
+          "--ht-meter-value",
+          Math.min(100, (o.interiorByteLength / cap) * 100) + "%",
+        );
+        meter.appendChild(fill);
+        dd.appendChild(meter);
+        facts.append(el("dt", null, ""), dd);
+        body.appendChild(facts);
+
+        if (rec.decodeError) {
+          body.appendChild(
+            el(
+              "p",
+              "note",
+              "the header reads, but the entries do not: " +
+                rec.decodeError +
+                " — the interior pixels were likely altered after encoding.",
+            ),
+          );
+          return panel;
+        }
+
+        // entries. A JSON sidecar that declares encryption (part.json in
+        // an album) speaks for the non-JSON entries beside it.
+        const jsons = rec.entries.map(asJson);
+        const encMeta = jsons.find(
+          (j) => j && j.encrypted === true && typeof j.iv === "string",
+        );
+        for (let i = 0; i < rec.entries.length; i++) {
+          const e = rec.entries[i];
+          const j = jsons[i];
+          const box = el("div", "entry");
+          const eh = el("div", "ehead");
+          eh.append(
+            el("span", null, e.name || "entry " + i),
+            el("span", "badge", e.mimetype || "application/octet-stream"),
+            el("span", "badge", fmtBytes(e.data.length)),
+          );
+          const encrypted = encMeta && !j && kindOf(e.mimetype) !== "text";
+          if (encrypted) {
+            const b = el("span", "badge", "encrypted");
+            b.dataset.emphasis = "strong";
+            eh.appendChild(b);
+          }
+          box.appendChild(eh);
+
+          if (encrypted) {
+            const declared = [];
+            if (encMeta.bits && encMeta.rate)
+              declared.push(
+                encMeta.bits +
+                  "-bit " +
+                  encMeta.rate +
+                  " Hz × " +
+                  (encMeta.channels || 1) +
+                  "ch",
+              );
+            if (encMeta.frames && encMeta.rate)
+              declared.push(fmtTime(encMeta.frames / encMeta.rate));
+            box.appendChild(
+              el(
+                "p",
+                "note",
+                "AES-GCM ciphertext · iv " +
+                  encMeta.iv +
+                  (declared.length
+                    ? " · declares " + declared.join(" · ")
+                    : ""),
+              ),
+            );
+            const sub = el("div", "fold");
+            box.appendChild(sub);
+            const hit = await tryDecrypt(encMeta.iv, e.data);
+            if (hit) fillDecrypted(sub, e, hit);
+            else {
+              sub.appendChild(
+                el(
+                  "p",
+                  "note",
+                  "locked — no key on this page opens it. add one under “key” above.",
+                ),
+              );
+              locked.push({ box: sub, entry: e, iv: encMeta.iv });
+            }
+            box.appendChild(
+              dlLink(e.name, e.data, null, "download ciphertext"),
+            );
+          } else {
+            if (j && hasKeyField(j))
+              box.appendChild(
+                el(
+                  "p",
+                  "note",
+                  "carries an encryption key — added to the key ring above.",
+                ),
+              );
+            kindDetail(box, e.mimetype, e.name, e.data);
+            box.appendChild(dlLink(e.name, e.data, e.mimetype));
+          }
+          body.appendChild(box);
+        }
+        return panel;
+      }
+
+      // ---- inspection ---------------------------------------------
+      async function inspectFiles(files) {
+        setStatus(
+          "reading " +
+            files.length +
+            " file" +
+            (files.length === 1 ? "" : "s") +
+            "…",
+          "busy",
+        );
+        const recs = [];
+        for (const f of files) {
+          const rec = { name: f.name, size: f.size, blob: f };
+          try {
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            rec.img = await toImg(bytes);
+            try {
+              rec.header = Stegassette.unpackStgcHeaderAlpha(rec.img);
+              try {
+                const d = Stegassette.decodeContainer(rec.img, rec.img);
+                rec.entries = d.entries;
+                rec.opts = d.opts;
+              } catch (err) {
+                rec.decodeError = err.message;
+              }
+            } catch (err) {
+              rec.headerError = err.message;
+            }
+          } catch (err) {
+            rec.readError = err.message || "not an image";
+          }
+          recs.push(rec);
+        }
+        // keys before reports, so parts dropped alongside their cover
+        // arrive already unlocked, whatever order the batch came in
+        for (const r of recs)
+          for (const e of r.entries || []) {
+            const j = asJson(e);
+            if (j) await scanKeys(j, r.name);
+          }
+        for (const r of recs) $("reports").appendChild(await report(r));
+        $("clear").hidden = false;
+        const ok = recs.filter((r) => r.opts).length;
+        setStatus(
+          ok + " of " + recs.length + " read as stegassettes",
+          ok ? "done" : "error",
+        );
+      }
+
+      // ---- wiring -------------------------------------------------
+      const drop = $("drop");
+      drop.addEventListener("click", () => $("file").click());
+      drop.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          $("file").click();
+        }
+      });
+      drop.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        drop.dataset.state = "over";
+      });
+      drop.addEventListener("dragleave", () => {
+        delete drop.dataset.state;
+      });
+      drop.addEventListener("drop", (e) => {
+        e.preventDefault();
+        delete drop.dataset.state;
+        const files = [...e.dataTransfer.files];
+        if (files.length) inspectFiles(files);
+      });
+      $("file").addEventListener("change", (e) => {
+        const files = [...e.target.files];
+        e.target.value = "";
+        if (files.length) inspectFiles(files);
+      });
+
+      $("keyAdd").addEventListener("click", async () => {
+        const v = $("keyText").value.trim();
+        if (!v) return;
+        if (await registerKey(v, "pasted key")) {
+          $("keyText").value = "";
+          setStatus("key added", "done");
+        } else setStatus("not a key — expected 32 bytes of base64", "error");
+      });
+      $("keyText").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") $("keyAdd").click();
+      });
+      $("keyFileBtn").addEventListener("click", () => $("keyFile").click());
+      $("keyFile").addEventListener("change", async (e) => {
+        const f = e.target.files[0];
+        e.target.value = "";
+        if (!f) return;
+        let n = 0;
+        try {
+          const bytes = new Uint8Array(await f.arrayBuffer());
+          try {
+            // a stegassette that carries its key — an album cover
+            const img = await toImg(bytes);
+            const d = Stegassette.decodeContainer(img, img);
+            for (const e2 of d.entries) {
+              const j = asJson(e2);
+              if (j) n += await scanKeys(j, f.name);
+            }
+          } catch (_) {
+            // else the file holds the key itself: bare base64, or JSON
+            const text = dec.decode(bytes).trim();
+            if (await registerKey(text, f.name)) n = 1;
+            else {
+              try {
+                n += await scanKeys(JSON.parse(text), f.name);
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+        setStatus(
+          n ? "key loaded from " + f.name : "no key found in " + f.name,
+          n ? "done" : "error",
+        );
+      });
+
+      $("clear").addEventListener("click", () => {
+        $("reports").innerHTML = "";
+        $("clear").hidden = true;
+        locked.length = 0;
+        for (const u of blobUrls.splice(0)) URL.revokeObjectURL(u);
+        setStatus("");
+      });
+    </script>
+  </body>
+</html>
