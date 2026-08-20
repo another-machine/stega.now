@@ -40,6 +40,10 @@
         --intro-width: 80%;
         --gal-veil: blur(1rem) brightness(35%);
         --kid-gap: calc(var(--gal-pad) * 2);
+        /* the clip's height, and so the height a wide room owes it */
+        --kid-clip: clamp(160px, 30svh, 420px);
+        /* the width a tall room owes the column beside the picture */
+        --kid-column: min(38vw, 30rem);
       }
       @media (min-width: 1024px) {
         :root {
@@ -71,45 +75,47 @@
         --gal-work-h: var(--og-height);
         box-shadow: var(--gal-glow);
       }
-      /* The button is the frame: it takes the picture's shape and is capped
-         at the stegassette's own pixels, so nothing is ever shown larger than
-         the pixels it has — those pixels are the subject. It has to be given
-         the edge the room is spending, width in a wide room and height in a
-         tall one, or it shrink-wraps whatever is inside and everything settles
-         at the thumbnail's size for want of anything else to resolve to. */
+      /* The frame is the picture. The thumbnail sizes itself the way any
+         replaced box does — both edges free, each capped — so the button
+         shrink-wraps it exactly and the glow hangs on the picture rather than
+         standing off it. Stretching the button and containing the picture
+         inside showed, because the halo is drawn on the box.
+         The caps are in viewport units, not percentages: the button has no
+         size of its own for a percentage to measure against, so it is told
+         what the room is spending elsewhere — the clip's line beneath a wide
+         picture, the card's column beside a tall one. */
       .work {
-        aspect-ratio: var(--og-width) / var(--og-height);
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         justify-content: center;
-        max-height: min(100%, var(--og-height));
-        max-width: min(90%, var(--og-width));
         min-height: 0;
         min-width: 0;
       }
-      .room[data-shape="wide"] .work {
-        width: 100%;
-      }
-      .room[data-shape="tall"] .work {
-        height: 100%;
-      }
-      /* Both the thumbnail and the decode surface letterbox the same picture
-         into that frame, so they land on the same pixels. Sizing either one by
-         a specified edge and clamping the other squashes it — a replaced box
-         only keeps its ratio while one edge is free. */
       .work > img.thumb {
-        height: 100%;
-        object-fit: contain;
-        width: 100%;
+        height: auto;
+        width: auto;
+      }
+      .room[data-shape="wide"] .work > img.thumb {
+        max-height: min(
+          calc(100svh - var(--kid-clip) - var(--kid-gap) - var(--gal-pad) * 2),
+          var(--og-height)
+        );
+        max-width: min(90svw, var(--og-width));
+      }
+      .room[data-shape="tall"] .work > img.thumb {
+        max-height: min(calc(100svh - var(--gal-pad) * 2), var(--og-height));
+        max-width: min(
+          calc(100svw - var(--kid-column) - var(--kid-gap) - var(--gal-pad) * 2),
+          var(--og-width)
+        );
       }
       /* the stegassette itself is the decode source, never a picture on the
          page — the thumbnail stands in for it, at a size a browser can scale */
       .work > img.media {
         display: none;
       }
-      /* The decode surface is two stacked canvases. It covers the button, the
-         thumbnail still holding the frame underneath — both letterbox the same
-         picture into the same box, so they land on the same pixels, and the
-         canvases stay in register with each other. */
+      /* The decode surface is two stacked canvases covering the button, the
+         thumbnail still holding the frame underneath. The button is the
+         picture's own box, so they land on the same pixels. */
       .work > .rev {
         inset: 0;
         position: absolute;
@@ -141,7 +147,7 @@
       }
       .room[data-shape="tall"] .lower {
         flex-direction: column;
-        width: min(38%, 30rem);
+        width: var(--kid-column);
       }
 
       /* the clip: 128px-wide stills out of the same payload, at 6fps. Beside a
@@ -152,7 +158,7 @@
         aspect-ratio: var(--film-share, 1.3333);
         display: flex;
         flex: 0 0 auto;
-        height: clamp(160px, 30svh, 420px);
+        height: var(--kid-clip);
         justify-content: center;
         margin: 0;
         min-width: 0;
@@ -215,9 +221,12 @@
         .room[data-shape="tall"] {
           flex-direction: column;
         }
-        .room[data-shape="tall"] .work {
-          height: auto;
-          width: 100%;
+        .room[data-shape="tall"] .work > img.thumb {
+          max-height: min(
+            calc(100svh - var(--kid-clip) - var(--kid-gap) - var(--gal-pad) * 2),
+            var(--og-height)
+          );
+          max-width: min(90svw, var(--og-width));
         }
         .lower,
         .room[data-shape="tall"] .lower {
