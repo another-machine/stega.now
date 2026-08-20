@@ -59,7 +59,11 @@
       /* The room arranges itself around the shape of its picture, which is
          known before anything decodes: a wide cover runs across the top with
          the clip beneath it, a tall one stands beside it. */
-      .room {
+      /* :not(.placard), because a placard is a room too and this would take
+         its padding and its paragraph spacing with it — an unlayered rule
+         beats amplib-gallery's own whatever the order, so the black rooms
+         would stop matching geese/ */
+      .room:not(.placard) {
         gap: var(--kid-gap);
         padding: var(--gal-pad);
       }
