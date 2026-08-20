@@ -12,6 +12,11 @@ eating. The clip plays beside the reveal, and the card under them shows the
 scene, the year, the quote, and the note I wrote back to the kid in the
 picture.
 
+The clip dissolves rather than cuts. Six frames a second is slow enough that
+a cut reads as a stutter, so each frame holds for the first part of its turn
+and crossfades into the next over the rest. `FADE` in `index.js` sets how
+much of the turn goes to the dissolve: 0 cuts, 1 never holds a frame still.
+
 `index.js` drives `Stegassette.createRevealPlayer` from `../lib/stegassette.js`.
 The player exposes `entries`, so the stills and the text come straight off it.
 It gives no per-frame callback, so the clip runs off the player's own clock —

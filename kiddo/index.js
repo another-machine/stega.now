@@ -65,14 +65,35 @@ async function loadFrames(entries) {
 
 // ── the clip ────────────────────────────────────────────────────────────────
 
+// How much of a frame's turn goes to dissolving into the next one. At 6fps a
+// cut lands hard, and the source is soft VHS: a dissolve over the tail of each
+// turn carries the motion without smearing the whole frame. 0 cuts, 1 dissolves
+// end to end and never holds a frame still.
+const FADE = 0.5;
+
 const clock = (s) =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-function drawFrame(rec, i) {
-  const bitmap = rec.frames[i];
-  if (!bitmap || i === rec.shown) return;
-  filmCtx.drawImage(bitmap, 0, 0, film.width, film.height);
-  rec.shown = i;
+// ease the ramp: a linear dissolve reads as a lurch through its midpoint
+const smoothstep = (x) => x * x * (3 - 2 * x);
+
+// `mix` is how far into the dissolve this frame is, 0–1
+function paint(rec, i, mix) {
+  const { frames } = rec;
+  if (!frames[i]) return;
+  filmCtx.drawImage(frames[i], 0, 0, film.width, film.height);
+  if (mix > 0) {
+    // the clip loops with the audio, so the last frame dissolves into the first
+    filmCtx.globalAlpha = mix;
+    filmCtx.drawImage(
+      frames[(i + 1) % frames.length],
+      0,
+      0,
+      film.width,
+      film.height,
+    );
+    filmCtx.globalAlpha = 1;
+  }
 }
 
 function runFilm(rec) {
@@ -84,9 +105,15 @@ function runFilm(rec) {
     }
     const raw = player.audioContext.currentTime - player.t0;
     const at = raw > 0 ? raw % player.duration : 0;
-    drawFrame(
+    // where the playhead sits in frames, not seconds: the whole part picks the
+    // frame, the fraction is how far through its turn we are
+    const pos = (at / player.duration) * frames.length;
+    const i = Math.min(frames.length - 1, Math.floor(pos));
+    const into = pos - i;
+    paint(
       rec,
-      Math.min(frames.length - 1, Math.floor((at / player.duration) * frames.length)),
+      i,
+      FADE > 0 ? smoothstep(Math.min(1, Math.max(0, (into - 1 + FADE) / FADE))) : 0,
     );
     timeEl.textContent = `${clock(at)} / ${clock(player.duration)}`;
     rec.raf = requestAnimationFrame(tick);
@@ -139,7 +166,7 @@ async function build(button, thumb, media) {
     film.width = frames[0].width;
     film.height = frames[0].height;
 
-    const rec = { player, frames, raf: null, shown: -1 };
+    const rec = { player, frames, raf: null };
     records.set(button, rec);
     return rec;
   } finally {
@@ -206,8 +233,7 @@ document.querySelectorAll("nav.rail button").forEach((button) => {
     // seed the pane before the clock exists: first still, zeroed readout. The
     // loop only writes the readout on its first frame, and that is a frame
     // away — long enough to show the previous work's time.
-    rec.shown = -1;
-    drawFrame(rec, 0);
+    paint(rec, 0, 0);
     timeEl.textContent = `0:00 / ${clock(rec.player.duration)}`;
     showCard(rec.player.entries);
 
