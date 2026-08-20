@@ -72,7 +72,9 @@
 
   async function fetchBlob(url, expectedBytes, onProgress, signal) {
     const hit = await ReleaseStore.get(url);
-    if (hit) {
+    // A stored blob whose size disagrees with the manifest is from an older
+    // encode — serving it would mix key generations. Refetch over it.
+    if (hit && (!expectedBytes || hit.size === expectedBytes)) {
       onProgress(1, hit.size, hit.size, true);
       return hit;
     }
@@ -664,7 +666,12 @@
     let data = audioEntry.data;
     if (part && part.encrypted) {
       if (!albumKey) throw new Error("locked — the cover holds the key and it has not decoded");
-      data = await Stegassette.decryptBytes(albumKey, part.iv, data);
+      try {
+        data = await Stegassette.decryptBytes(albumKey, part.iv, data);
+      } catch (e) {
+        // AES-GCM refuses when cover and track come from different encodes.
+        throw new Error("decryption failed — cover and track are from different encodes; clear storage and reload");
+      }
       // The ciphertext copy is dead weight once decrypted; big payloads only
       // keep the entry for the reveal when it is small enough anyway.
       if (audioEntry.data.length > REVEAL_ENTRY_MAX) audioEntry.data = null;
