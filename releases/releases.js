@@ -510,7 +510,15 @@
       np.frameIdx = 0;
     }
     if (!part || !part.img) {
-      npReveal.hidden = np.frameCtx === null;
+      if (part && part.revealNote && !np.frameCtx) {
+        const note = document.createElement("p");
+        note.className = "u-faint ht-type-small";
+        note.textContent = part.revealNote;
+        npReveal.append(note);
+        npReveal.hidden = false;
+      } else {
+        npReveal.hidden = np.frameCtx === null;
+      }
       return;
     }
     try {
@@ -637,6 +645,15 @@
   }
 
   // ── decode one item into a chain part ─────────────────────────────────────
+  // Past this payload size, the byte-order sweep (revealSpanForEntry)
+  // re-decodes the whole payload and sorts a pixel-count index array on the
+  // main thread — seconds of jank. Fall back to the traversal-order sweep.
+  const REVEAL_ENTRY_MAX = 32e6;
+  // Past this pixel count the reveal's surfaces (encoded copy, overlay,
+  // two full-res canvases) cost the better part of a gigabyte on top of the
+  // AudioBuffer, which is what actually crashes tabs on the >100 MB tracks.
+  const REVEAL_MAX_PIXELS = 40e6;
+
   async function extractAudio(entries) {
     const partEntry = entries.find((e) => e.name === "part.json");
     const part = partEntry ? JSON.parse(textOf(partEntry)) : null;
@@ -648,26 +665,54 @@
     if (part && part.encrypted) {
       if (!albumKey) throw new Error("locked — the cover holds the key and it has not decoded");
       data = await Stegassette.decryptBytes(albumKey, part.iv, data);
+      // The ciphertext copy is dead weight once decrypted; big payloads only
+      // keep the entry for the reveal when it is small enough anyway.
+      if (audioEntry.data.length > REVEAL_ENTRY_MAX) audioEntry.data = null;
     }
-    const parsed = Stegassette.parseAudioEntry({
-      mimetype: audioEntry.mimetype,
-      name: audioEntry.name,
-      data,
-    });
-    return { parsed, audioEntry };
+    return { data, audioEntry };
+  }
+
+  // Decode PCM straight into the AudioBuffer's channels, skipping the planar
+  // Float32 intermediate parseAudioEntry builds — that copy alone is ~400 MB
+  // on the largest tracks. The formulas mirror the library's toFloat32.
+  function pcmToAudioBuffer(data, mimetype) {
+    const m = Stegassette.parseAudioMime(mimetype);
+    if (m.layout === "block") return null; // rare; the caller falls back to the library
+    const B = m.bits >> 3;
+    const M = m.channels;
+    const frames = Math.floor(data.length / B / M);
+    if (!frames) return null;
+    const buf = actx.createBuffer(M, frames, m.rate);
+    for (let c = 0; c < M; c++) {
+      const out = buf.getChannelData(c);
+      for (let s = 0; s < frames; s++) {
+        const o = (m.layout === "interleaved" ? s * M + c : c * frames + s) * B;
+        out[s] =
+          B === 1
+            ? (data[o] - 128) / 128
+            : B === 2
+              ? (data[o] * 256 + data[o + 1]) / 32767.5 - 1
+              : (data[o] * 65536 + data[o + 1] * 256 + data[o + 2]) / 8388607.5 - 1;
+      }
+    }
+    return buf;
   }
 
   async function decodeItem(blob, gridIdx) {
     const img = await imgFromBlob(blob);
     const { entries, opts } = Stegassette.decodeContainer(img, img);
-    const { parsed, audioEntry } = await extractAudio(entries);
-    const buffer = actx.createBuffer(parsed.channels.length, parsed.channels[0].length, parsed.sampleRate);
-    for (let c = 0; c < parsed.channels.length; c++) buffer.getChannelData(c).set(parsed.channels[c]);
-    // Past this size, the byte-order sweep (revealSpanForEntry) re-decodes the
-    // whole payload and sorts a pixel-count index array on the main thread —
-    // seconds of jank on the biggest tracks. Fall back to the traversal-order
-    // sweep (null entry), which also lets the payload bytes be freed.
-    const REVEAL_ENTRY_MAX = 32e6;
+    const { data, audioEntry } = await extractAudio(entries);
+    let buffer = pcmToAudioBuffer(data, audioEntry.mimetype);
+    if (!buffer) {
+      const parsed = Stegassette.parseAudioEntry({
+        mimetype: audioEntry.mimetype,
+        name: audioEntry.name,
+        data,
+      });
+      buffer = actx.createBuffer(parsed.channels.length, parsed.channels[0].length, parsed.sampleRate);
+      for (let c = 0; c < parsed.channels.length; c++) buffer.getChannelData(c).set(parsed.channels[c]);
+    }
+    const oversized = img.width * img.height > REVEAL_MAX_PIXELS;
     let frames = null;
     if (rel.kind === "video") {
       const frameEntries = entries
@@ -682,9 +727,13 @@
     return {
       buffer,
       dur: buffer.duration,
-      img,
+      img: oversized ? null : img,
       opts,
-      revealEntry: audioEntry.data.length <= REVEAL_ENTRY_MAX ? audioEntry : null,
+      revealEntry:
+        !oversized && audioEntry.data && audioEntry.data.length <= REVEAL_ENTRY_MAX
+          ? audioEntry
+          : null,
+      revealNote: oversized ? "image too large for the live decode view" : null,
       frames,
       entries,
       gridIdx,
