@@ -255,8 +255,6 @@ function fact(dl, term, value) {
   dl.append(dt, dd);
 }
 
-const KIND_LABEL = { front: "Front matter", body: "Text", back: "Back matter" };
-
 function showBook() {
   const b = state.book;
   const meta = b.book || {};
@@ -284,16 +282,8 @@ function showBook() {
   const pos = loadPosition();
   const toc = $("toc");
   toc.textContent = "";
-  let lastKind = null;
   let seenHere = false;
   b.chapters.forEach((c, i) => {
-    if (c.kind !== lastKind) {
-      lastKind = c.kind;
-      const label = document.createElement("p");
-      label.className = "ht-type-eyebrow toc-group u-faint";
-      label.textContent = KIND_LABEL[c.kind] || c.kind;
-      toc.append(label);
-    }
     const item = document.createElement("button");
     item.type = "button";
     item.className = "toc-item";

@@ -37,9 +37,9 @@ all; the library that takes stegassettes off your own disk is
 [home](../home/).
 
 The shelf is the jacket, what is known about the printing, and the contents.
-The contents are grouped as the book itself is — front matter, text, back
-matter — and each chapter carries its length in words and about how long it
-runs aloud. Where you stopped is marked, and what you have passed is dimmed.
+The contents run straight through in reading order, and each chapter carries
+its length in words and about how long it runs aloud. Where you stopped is
+marked, and what you have passed is dimmed.
 
 ## Read
 

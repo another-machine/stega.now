@@ -21,7 +21,7 @@ const Books = {
     "american-indian-stories": {
       id: "american-indian-stories",
       file: "american-indian-stories.png",
-      bytes: 17037885,
+      bytes: 17037887,
       name: "American Indian Stories",
       line: "Zitkála-Šá · Hayworth Publishing House, 1921",
     },

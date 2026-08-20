@@ -162,14 +162,17 @@
         width: 100%;
         max-width: var(--ht-measure);
       }
-      .toc-group + .toc-group {
-        margin-block-start: var(--ht-space-5);
-      }
+      /* A row is a <button>, so it needs the same undoing the shelf tiles
+         need: ui.css dresses every bare button as a control, and a control's
+         nowrap would truncate a long chapter title instead of wrapping it.
+         width and min-width keep the row in its column either way. */
       .toc-item {
         display: flex;
         align-items: baseline;
         gap: var(--ht-space-3);
         width: 100%;
+        min-width: 0;
+        white-space: normal;
         padding: var(--ht-space-2) 0;
         border: 0;
         border-block-end: var(--ht-hairline) solid var(--ht-line);
@@ -184,6 +187,9 @@
       }
       .toc-title {
         flex: 1 1 auto;
+        /* a flex item is min-width:auto, so without this a long title pushes
+           the row wider instead of wrapping inside it */
+        min-width: 0;
       }
       .toc-meta {
         flex: 0 0 auto;
