@@ -153,6 +153,82 @@ p {
   overflow-wrap: anywhere;
 }
 
+/* documentation: the data-only stegassettes, below the track grid. The
+   calendar covers are twice as tall as they are wide, so the picture takes a
+   narrow column of its own and the decoded text reads beside it. */
+.docs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-flow);
+  width: 100%;
+  max-width: var(--ht-page-max);
+}
+.doc {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  gap: var(--ht-space-5);
+  align-items: start;
+}
+@media (max-width: 30rem) {
+  .doc {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.doc__face {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-2);
+  width: 100%;
+  min-width: 0;
+}
+.doc__face img {
+  width: 100%;
+  display: block;
+}
+.doc__face:hover {
+  background: none;
+  color: inherit;
+}
+.doc__face:hover img,
+.doc__face[aria-expanded="true"] img {
+  outline: 2px solid var(--ht-ink);
+  outline-offset: 2px;
+}
+.doc__face:hover .doc__name {
+  text-decoration: underline;
+}
+.doc__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-3);
+  min-width: 0;
+}
+.doc__texts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-2);
+}
+/* each label sits tight above the block it names, not evenly among them */
+.doc__texts .doc__label {
+  margin-top: var(--ht-space-3);
+}
+.doc__texts .doc__label:first-child {
+  margin-top: 0;
+}
+.doc__text {
+  max-width: var(--ht-measure);
+  white-space: pre-wrap; /* decoded text entries carry real newlines */
+}
+
 /* player */
 #np {
   border-top: var(--ht-hairline) solid var(--ht-line);

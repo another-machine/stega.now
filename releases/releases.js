@@ -8,10 +8,13 @@
   const $ = (id) => document.getElementById(id);
   const td = new TextDecoder();
 
-  // How much of a frame's turn goes to dissolving into the next one. At 6fps a
-  // cut lands hard: a dissolve over the tail of each turn carries the motion
-  // without smearing the whole frame. 0 cuts, 1 never holds a frame still.
-  // The kiddo gallery draws its stills the same way.
+  // How much of a frame's turn goes to dissolving into the next one. A sheet
+  // runs slower than the eye wants and its cuts land hard: a dissolve over the
+  // tail of each turn carries the motion without smearing the whole frame. A
+  // share of the turn rather than a span, so it holds its look at any frame
+  // rate — half of a 12fps turn is ~42 ms, half of a 6fps one ~83 ms.
+  // 0 cuts, 1 never holds a frame still. The kiddo gallery draws its stills
+  // the same way.
   const FRAME_FADE = 0.5;
   // ease the ramp: a linear dissolve reads as a lurch through its midpoint
   const smoothstep = (x) => x * x * (3 - 2 * x);
@@ -83,7 +86,7 @@
   // and only a reload fetch gets past it.
   const retryReload = new Set();
 
-  async function fetchBlob(url, expectedBytes, onProgress, signal) {
+  async function fetchBlob(url, expectedBytes, onProgress, signal, forced) {
     const hit = await ReleaseStore.get(url);
     // A stored blob whose size disagrees with the manifest is from an older
     // encode — serving it would mix key generations. Refetch over it.
@@ -91,18 +94,30 @@
       onProgress(1, hit.size, hit.size, true);
       return hit;
     }
+    // That refetch has to bypass the HTTP cache, or it heals nothing: objects
+    // serve with a 4-hour max-age, so a plain fetch hands back the very bytes
+    // the size check just rejected, stores them again, and the release stays
+    // stale for as long as the cache entry lives.
+    const reload = forced || retryReload.has(url) || (hit != null && expectedBytes > 0);
     let res;
     try {
       res = await fetch(url, {
         mode: "cors",
         signal,
-        cache: retryReload.has(url) ? "reload" : "default",
+        cache: reload ? "reload" : "default",
       });
     } catch (e) {
       retryReload.add(url);
       throw e;
     }
-    if (!res.ok) throw new Error(`download failed (HTTP ${res.status})`);
+    // A 404 resolves rather than throwing, so the catch above never sees it —
+    // and the disk cache holds a negative response as readily as a stale one.
+    // An object uploaded after a visitor's first miss would 404 for them until
+    // that entry expired, "try again" included. Arm the reload here too.
+    if (!res.ok) {
+      retryReload.add(url);
+      throw new Error(`download failed (HTTP ${res.status})`);
+    }
     retryReload.delete(url);
     const total = Number(res.headers.get("content-length")) || expectedBytes || 0;
     let blob;
@@ -121,6 +136,12 @@
     } else {
       blob = await res.blob();
       onProgress(1, blob.size, blob.size, false);
+    }
+    // A first visit has no stored blob to disagree with, so the same cached
+    // response gets through unnoticed. The size the manifest promised is the
+    // other half of the check: miss it, and force one reload before storing.
+    if (expectedBytes && blob.size !== expectedBytes && !reload) {
+      return fetchBlob(url, expectedBytes, onProgress, signal, true);
     }
     ReleaseStore.put(url, blob).then((ok) => {
       if (ok) {
@@ -403,21 +424,15 @@
   let tickTimer = null;
   let dragging = false;
 
-  // A part carries its video either as a sheet (one bitmap, drawn by
-  // sub-rectangle) or as a bitmap per frame. Everything downstream goes
-  // through these two so it never has to care which.
+  // A part carries its video as a frame sheet: one bitmap holding every frame
+  // as a cell, plus the grid that says how to walk it. One entry however long
+  // the clip, and one decode to draw from.
   function frameCount(p) {
-    if (!p) return 0;
-    if (p.sheet) return p.sheet.count;
-    return p.frames ? p.frames.length : 0;
+    return p && p.sheet ? p.sheet.count : 0;
   }
   function drawCell(ctx, p, idx) {
-    if (p.sheet) {
-      const { bitmap, cols, cellWidth: cw, cellHeight: ch } = p.sheet;
-      ctx.drawImage(bitmap, (idx % cols) * cw, Math.floor(idx / cols) * ch, cw, ch, 0, 0, cw, ch);
-    } else {
-      ctx.drawImage(p.frames[idx], 0, 0);
-    }
+    const { bitmap, cols, cellWidth: cw, cellHeight: ch } = p.sheet;
+    ctx.drawImage(bitmap, (idx % cols) * cw, Math.floor(idx / cols) * ch, cw, ch, 0, 0, cw, ch);
   }
 
   // `mix` is how far into the dissolve this frame is, 0-1. Both cells cover
@@ -435,7 +450,10 @@
   }
 
   // Where the playhead sits in frames, not seconds: the whole part picks the
-  // frame, the fraction is how far through its turn we are.
+  // frame, the fraction is how far through its turn we are. The sheet carries
+  // its own frame rate, so the film runs on that against the audio playhead
+  // rather than being stretched to whatever length the track turned out to be.
+  // A sheet that runs short holds its last frame; one that runs long is cut off.
   function paintFilm() {
     if (!np || !np.frameCtx) return;
     const pos = position();
@@ -444,7 +462,7 @@
     const p = np.parts[j];
     const n = frameCount(p);
     if (!n) return;
-    const fpos = ((pos - p.start) / p.dur) * n;
+    const fpos = (pos - p.start) * p.sheet.fps;
     const idx = Math.min(n - 1, Math.max(0, Math.floor(fpos)));
     const into = fpos - idx;
     const mix = FRAME_FADE > 0
@@ -458,8 +476,8 @@
     paintFrame(np.frameCtx, p, idx, mix);
   }
 
-  // The 100 ms tick is far too coarse for a dissolve — at 6fps a frame's turn
-  // is ~167 ms — so the film runs on its own rAF while the audio plays.
+  // The 100 ms tick is far too coarse for a dissolve — at 12fps a frame's turn
+  // is ~83 ms — so the film runs on its own rAF while the audio plays.
   function runFilm() {
     if (!np || np.filmRaf != null) return;
     const chain = np;
@@ -492,7 +510,7 @@
     return {
       gen,
       expected, // how many parts the chain will eventually hold
-      parts: [], // {buffer, dur, start, img, opts, revealEntry, pair, frames, sheet, gridIdx}
+      parts: [], // {buffer, dur, start, img, opts, revealEntry, pair, sheet, gridIdx}
       // Looping is per-source, so it is only sound for a chain of one; a
       // multi-part loop would stack overlapping sources.
       loop: rel.kind === "video" && expected === 1,
@@ -504,7 +522,7 @@
       sources: [],
       partIdx: -1, // part currently shown in the reveal
       revealObj: null,
-      frameCtx: null, // canvas 2d context when the part carries video frames
+      frameCtx: null, // canvas 2d context when the part carries a frame sheet
       frameIdx: -1,
       frameMix: -1, // last dissolve amount painted, see paintFilm()
       filmRaf: null,
@@ -652,8 +670,8 @@
     if (frameCount(part)) {
       // Video cartridge: frames canvas plus the live develop, side by side.
       const c = document.createElement("canvas");
-      c.width = part.sheet ? part.sheet.cellWidth : part.frames[0].width;
-      c.height = part.sheet ? part.sheet.cellHeight : part.frames[0].height;
+      c.width = part.sheet.cellWidth;
+      c.height = part.sheet.cellHeight;
       c.className = "np-frames";
       npReveal.append(c);
       npReveal.hidden = false;
@@ -937,7 +955,6 @@
       buffer = actx.createBuffer(parsed.channels.length, parsed.channels[0].length, parsed.sampleRate);
       for (let c = 0; c < parsed.channels.length; c++) buffer.getChannelData(c).set(parsed.channels[c]);
     }
-    let frames = null;
     let sheet = null;
     if (rel.kind === "video") {
       // A frame sheet is every frame tiled into one entry, described by a
@@ -955,16 +972,8 @@
           cellWidth: grid.cellWidth,
           cellHeight: grid.cellHeight,
           count: grid.count,
+          fps: grid.fps,
         };
-      } else {
-        const frameEntries = entries
-          .filter((e) => /^frame-\d+$/.test(e.name) && /^image\//.test(e.mimetype))
-          .sort((a, b) => parseInt(a.name.slice(6), 10) - parseInt(b.name.slice(6), 10));
-        if (frameEntries.length) {
-          frames = await Promise.all(
-            frameEntries.map((e) => createImageBitmap(new Blob([e.data], { type: e.mimetype }))),
-          );
-        }
       }
     }
     return {
@@ -979,7 +988,6 @@
       sheet,
       pair,
       revealNote: oversized ? "too big to animate decoding" : null,
-      frames,
       entries,
       gridIdx,
     };
@@ -995,15 +1003,14 @@
     pause();
     if (np) {
       stopFilm();
-      // Release the superseded chain's frame bitmaps (GPU-backed).
+      // Release the superseded chain's sheet bitmaps (GPU-backed).
       for (const p of np.parts) {
-        for (const b of p.sheet ? [p.sheet.bitmap] : p.frames || []) {
+        if (p.sheet) {
           try {
-            b.close();
+            p.sheet.bitmap.close();
           } catch (e) {}
+          p.sheet = null;
         }
-        p.frames = null;
-        p.sheet = null;
       }
     }
     np = mkChain(gen, indices.length);
@@ -1093,6 +1100,113 @@
   if (playAllBtn) {
     playAllBtn.addEventListener("click", () => {
       loadSequence(rel.items.map((_, i) => i));
+    });
+  }
+
+  // ── documentation ─────────────────────────────────────────────────────────
+  // `docs` are data-only stegassettes: no audio, only the text that credits
+  // the release. They sit below the grid and load on a tap like a track, but
+  // they unfold in place instead of taking over the player — nothing they
+  // carry is timed, so there is nothing for the player to do with them.
+  const docsHost = $("docs");
+  if (docsHost && rel.docs) {
+    rel.docs.forEach((doc) => {
+      const url = Releases.url(rel, doc.file);
+      const cell = document.createElement("div");
+      cell.className = "doc";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "doc__face";
+      btn.setAttribute("aria-expanded", "false");
+      const img = document.createElement("img");
+      img.src = Releases.thumb(rel, doc.file);
+      img.alt = "";
+      const label = document.createElement("span");
+      label.className = "doc__name";
+      label.textContent = doc.name;
+      btn.append(img, label);
+
+      const body = document.createElement("div");
+      body.className = "doc__body";
+      const texts = document.createElement("div");
+      texts.className = "doc__texts";
+      texts.hidden = true;
+      const status = document.createElement("p");
+      status.className = "status";
+      status.dataset.state = "busy";
+      status.hidden = true;
+      const prog = document.createElement("progress");
+      prog.max = 1;
+      prog.value = 0;
+      prog.hidden = true;
+      const meta = document.createElement("p");
+      meta.className = "u-faint ht-type-small";
+      meta.textContent = fmtBytes(doc.bytes);
+      body.append(texts, status, prog, meta);
+
+      let busy = false;
+      let opened = false;
+      async function open() {
+        // Once decoded the face is a show/hide toggle: the bytes are spent,
+        // and the picture stays tappable rather than going dead.
+        if (opened) {
+          texts.hidden = !texts.hidden;
+          btn.setAttribute("aria-expanded", String(!texts.hidden));
+          return;
+        }
+        if (busy) return;
+        busy = true;
+        status.hidden = false;
+        status.dataset.state = "busy";
+        prog.hidden = false;
+        prog.value = 0;
+        try {
+          const blob = await fetchBlob(url, doc.bytes, (frac, got, total, fromStore) => {
+            prog.value = frac;
+            status.textContent = fromStore
+              ? "from storage"
+              : `${fmtBytes(got)} / ${total ? fmtBytes(total) : "?"}`;
+          });
+          status.textContent = "decoding";
+          prog.removeAttribute("value"); // indeterminate while pixels churn
+          await nextFrame();
+          const decoded = await imgFromBlob(blob);
+          const { entries } = Stegassette.decodeContainer(decoded, decoded);
+          // A label above each block, not the player's inline `name — text`:
+          // these entries are paragraphs, and a run-in dash buries the first
+          // line of one in its own heading.
+          entries
+            .filter((e) => /^text\//.test(e.mimetype))
+            .forEach((e) => {
+              line(texts, e.name.toLowerCase(), "doc__label u-faint ht-type-small");
+              line(texts, textOf(e), "doc__text");
+            });
+          opened = true;
+          texts.hidden = false;
+          btn.setAttribute("aria-expanded", "true");
+          status.hidden = true;
+          prog.hidden = true;
+          meta.textContent = "";
+          meta.append(`${fmtBytes(doc.bytes)} · `, viewLink(url));
+        } catch (e) {
+          prog.hidden = true;
+          status.dataset.state = "error";
+          status.textContent = `${e.message} — `;
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "linklike";
+          retry.textContent = "try again";
+          retry.addEventListener("click", open);
+          status.append(retry);
+        } finally {
+          busy = false;
+        }
+      }
+      btn.addEventListener("click", open);
+
+      cell.append(btn, body);
+      docsHost.append(cell);
     });
   }
 

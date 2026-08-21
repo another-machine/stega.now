@@ -14,13 +14,13 @@ const Releases = {
       prefix: "tt",
       cover: null,
       items: [
-        { file: "01-is-it-real.png", bytes: 21781713 },
-        { file: "02-valley-spirit-never-dies.png", bytes: 18773529 },
-        { file: "03-rando.png", bytes: 22182719 },
-        { file: "04-tic-tac-toe.png", bytes: 24418490 },
-        { file: "05-sister-heat.png", bytes: 22058068 },
-        { file: "06-waiting-for-the-whip.png", bytes: 23065262 },
-        { file: "07-when-the-wire-get-cut.png", bytes: 21085203 },
+        { file: "01-is-it-real.png", bytes: 26208854 },
+        { file: "02-valley-spirit-never-dies.png", bytes: 22810177 },
+        { file: "03-rando.png", bytes: 26518323 },
+        { file: "04-tic-tac-toe.png", bytes: 29077992 },
+        { file: "05-sister-heat.png", bytes: 26652997 },
+        { file: "06-waiting-for-the-whip.png", bytes: 27967463 },
+        { file: "07-when-the-wire-get-cut.png", bytes: 25341823 },
       ],
     },
     "cwrc-lofi": {
@@ -79,28 +79,35 @@ const Releases = {
       line: "idles · from the basement · loops",
       prefix: "idles",
       cover: null,
-      items: [{ file: "the-beachland-ballroom.png", bytes: 3800395 }],
+      items: [{ file: "the-beachland-ballroom.png", bytes: 4324737 }],
     },
     rhir: {
       id: "rhir",
       kind: "parts",
       name: "15 step",
-      line: "one song · twelve images",
+      line: "one song · twelve panels · two covers",
       prefix: "rhir",
       cover: null,
       items: [
-        { file: "15-step-01.png", bytes: 8023628 },
-        { file: "15-step-02.png", bytes: 8037749 },
-        { file: "15-step-03.png", bytes: 8035886 },
-        { file: "15-step-04.png", bytes: 8042165 },
-        { file: "15-step-05.png", bytes: 8039817 },
-        { file: "15-step-06.png", bytes: 8033555 },
-        { file: "15-step-07.png", bytes: 8040081 },
-        { file: "15-step-08.png", bytes: 8027487 },
-        { file: "15-step-09.png", bytes: 8029419 },
-        { file: "15-step-10.png", bytes: 8034889 },
-        { file: "15-step-11.png", bytes: 8041190 },
-        { file: "15-step-12.png", bytes: 8036666 },
+        { file: "15-step-01.png", bytes: 8023866 },
+        { file: "15-step-02.png", bytes: 8033289 },
+        { file: "15-step-03.png", bytes: 8035844 },
+        { file: "15-step-04.png", bytes: 8041920 },
+        { file: "15-step-05.png", bytes: 8039986 },
+        { file: "15-step-06.png", bytes: 8033410 },
+        { file: "15-step-07.png", bytes: 8040372 },
+        { file: "15-step-08.png", bytes: 8027583 },
+        { file: "15-step-09.png", bytes: 8029291 },
+        { file: "15-step-10.png", bytes: 8034914 },
+        { file: "15-step-11.png", bytes: 8040905 },
+        { file: "15-step-12.png", bytes: 8036281 },
+      ],
+      // The two calendar covers, encoded with a wide border so the artwork
+      // survives at a readable size around a small core of hidden text. No
+      // audio rides in them — they are the release's documentation.
+      docs: [
+        { file: "cover-front.png", bytes: 8564891, name: "front cover" },
+        { file: "cover-back.png", bytes: 10621567, name: "back cover" },
       ],
     },
   },
@@ -113,6 +120,7 @@ const Releases = {
   totalBytes(rel) {
     let n = rel.cover ? rel.cover.bytes : 0;
     for (const it of rel.items) n += it.bytes;
+    for (const d of rel.docs || []) n += d.bytes;
     return n;
   },
 };
