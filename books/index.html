@@ -284,8 +284,15 @@
         font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica,
           Arial, sans-serif;
       }
+      /* A chapter title wraps; a page title rarely does. Display type's flat
+         leading leaves a wrapped line no room for anything drawn behind it,
+         and the speaking highlight is drawn behind it — at leading 1 the
+         second line's highlight lands on the first line's letters. UI leading
+         is the smallest step in the scale that clears the highlight, and a
+         wrapped title reads better for it. */
       .reading h2 {
         margin: 0 0 var(--ht-space-6);
+        line-height: var(--ht-leading-ui);
       }
       .reading h3 {
         margin: var(--ht-space-7) 0 var(--ht-space-3);
@@ -306,11 +313,22 @@
         border-block-start: var(--ht-hairline) solid var(--ht-line-strong);
       }
       /* the sentence being spoken. Marked on the span the speech is reading,
-         so the highlight and the voice cannot disagree. */
+         so the highlight and the voice cannot disagree.
+         An inline background is always as tall as the font's content area,
+         about 1.15em, whatever the line-height says. Nothing can shrink it,
+         so the bleed around it has to be horizontal only: a vertical one
+         grows a box that is already taller than a tight line, and the
+         highlight of one wrapped line covers the line above it. Padding and
+         a negative margin of the same size give the sides their bleed
+         without moving a letter, and clone repeats both on every line of a
+         sentence rather than only the first and the last. */
       .reading .s[data-speaking] {
         background: var(--ht-ink-ghost);
-        box-shadow: 0 0 0 2px var(--ht-ink-ghost);
+        padding-inline: 2px;
+        margin-inline: -2px;
         border-radius: 2px;
+        -webkit-box-decoration-break: clone;
+        box-decoration-break: clone;
       }
       .reading .w[data-speaking] {
         text-decoration: underline;
