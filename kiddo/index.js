@@ -1,19 +1,22 @@
 // The kiddo gallery. A room per year, as in geese/ — one work, one viewport,
 // nothing else in it. Tapping the picture loads and plays it.
 //
-// A kiddo stegassette holds one audio entry, a run of `frame-001…` JPEG stills
-// at 6fps, and three text entries (Metadata, Quote, Message) the page does not
-// show yet. RevealPlayer decodes all of them and plays the audio; the stills
-// are ours to draw. There is no callback per frame, so the clip runs off its own
-// clock — `audioContext.currentTime - player.t0`, wrapped by `player.duration`
-// — which is the same clock the reveal sweeps on. One playhead, two pictures.
+// A kiddo stegassette holds one audio entry, a frame sheet — every still of the
+// clip tiled into one JPEG, with a `frames.json` beside it holding the grid —
+// and three text entries (Metadata, Quote, Message) the page does not show yet.
+// RevealPlayer decodes all of them and plays the audio; the sheet is ours to
+// draw from. There is no callback per frame, so the clip runs off its own clock
+// — `audioContext.currentTime - player.t0`, wrapped by `player.duration` —
+// which is the same clock the reveal sweeps on. One playhead, two pictures.
 //
 // `Stegassette` is the global installed by ../lib/stegassette.js.
 
-// How much of a frame's turn goes to dissolving into the next one. At 6fps a
-// cut lands hard, and the source is soft VHS: a dissolve over the tail of each
-// turn carries the motion without smearing the whole frame. 0 cuts, 1 dissolves
-// end to end and never holds a frame still.
+// How much of a frame's turn goes to dissolving into the next one. At 12fps a
+// cut still lands hard, and the source is soft VHS: a dissolve over the tail of
+// each turn carries the motion without smearing the whole frame. A share of the
+// turn rather than a span, so it holds its look at any frame rate — half of a
+// 12fps turn is ~42 ms. 0 cuts, 1 dissolves end to end and never holds a frame
+// still.
 const FADE = 0.5;
 
 // ease the ramp: a linear dissolve reads as a lurch through its midpoint
@@ -23,34 +26,55 @@ let audioContext;
 let current = null;
 let building = false;
 
-// the stills, in order. Names are zero-padded to a fixed width, so they sort
-// as strings — but sort explicitly rather than trusting entry order.
-async function loadFrames(entries) {
-  return Promise.all(
-    entries
-      .filter((e) => e.mimetype.startsWith("image/") && /^frame-\d+$/.test(e.name))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((e) => createImageBitmap(new Blob([e.data], { type: e.mimetype }))),
+// The clip, as one bitmap and the grid that walks it. A sheet is one entry
+// however long the clip is, where a still per frame costs an entry each — and
+// the header counts entries in a single byte, so a long clip at a real frame
+// rate cannot be carried that way at all. The grid names its own frame rate,
+// so the clip plays at the speed it was cut at rather than at whatever speed
+// its frame count over the audio's length works out to.
+async function loadSheet(entries) {
+  const sheet = entries.find(
+    (e) => e.name === "frames" && e.mimetype.startsWith("image/"),
   );
+  const grid = entries.find((e) => e.name === "frames.json");
+  if (!sheet || !grid) return null;
+  const { cols, cellWidth, cellHeight, count, fps } = JSON.parse(
+    new TextDecoder().decode(grid.data),
+  );
+  return {
+    bitmap: await createImageBitmap(new Blob([sheet.data], { type: sheet.mimetype })),
+    cols,
+    cellWidth,
+    cellHeight,
+    count,
+    fps,
+  };
 }
 
 // ── the clip ────────────────────────────────────────────────────────────────
 
-// `mix` is how far into the dissolve this frame is, 0–1
+// one cell of the sheet, drawn over the whole canvas — which build() sized to
+// exactly one cell, so the two can never disagree
+function drawCell(rec, i) {
+  const { bitmap, cols, cellWidth: cw, cellHeight: ch } = rec.sheet;
+  rec.ctx.drawImage(bitmap, (i % cols) * cw, Math.floor(i / cols) * ch, cw, ch, 0, 0, cw, ch);
+}
+
+// `mix` is how far into the dissolve this frame is, 0–1. Both cells cover the
+// canvas, so the outgoing frame needs no clear underneath.
 function paint(rec, i, mix) {
-  const { frames, film, ctx } = rec;
-  if (!frames?.[i]) return;
-  ctx.drawImage(frames[i], 0, 0, film.width, film.height);
+  if (!rec.sheet) return;
+  drawCell(rec, i);
   if (mix > 0) {
     // the clip loops with the audio, so the last frame dissolves into the first
-    ctx.globalAlpha = mix;
-    ctx.drawImage(frames[(i + 1) % frames.length], 0, 0, film.width, film.height);
-    ctx.globalAlpha = 1;
+    rec.ctx.globalAlpha = mix;
+    drawCell(rec, (i + 1) % rec.sheet.count);
+    rec.ctx.globalAlpha = 1;
   }
 }
 
 function runFilm(rec) {
-  const { player, frames } = rec;
+  const { player, sheet } = rec;
   const tick = () => {
     if (!player.playing) {
       rec.raf = null;
@@ -59,9 +83,11 @@ function runFilm(rec) {
     const raw = player.audioContext.currentTime - player.t0;
     const at = raw > 0 ? raw % player.duration : 0;
     // where the playhead sits in frames, not seconds: the whole part picks the
-    // frame, the fraction is how far through its turn we are
-    const pos = (at / player.duration) * frames.length;
-    const i = Math.min(frames.length - 1, Math.floor(pos));
+    // frame, the fraction is how far through its turn we are. The sheet carries
+    // its own frame rate, so a sheet that runs short of the audio holds its last
+    // frame rather than being stretched across it.
+    const pos = at * sheet.fps;
+    const i = Math.min(sheet.count - 1, Math.floor(pos));
     const into = pos - i;
     paint(
       rec,
@@ -99,13 +125,13 @@ async function build(rec) {
     audioContext,
     className: "rev",
   });
-  rec.frames = await loadFrames(rec.player.entries);
-  if (!rec.frames.length) throw new Error("no frame entries in stegassette");
+  rec.sheet = await loadSheet(rec.player.entries);
+  if (!rec.sheet) throw new Error("no frame sheet in stegassette");
 
-  // the clip's pane is sized by one edge; the frames' own ratio finds the
+  // the clip's pane is sized by one edge; the cell's own ratio finds the
   // other, and that ratio comes out of the payload rather than a guess here
-  rec.film.width = rec.frames[0].width;
-  rec.film.height = rec.frames[0].height;
+  rec.film.width = rec.sheet.cellWidth;
+  rec.film.height = rec.sheet.cellHeight;
   rec.room.style.setProperty("--film-share", rec.film.width / rec.film.height);
 
   // the decode surface covers the button; the thumbnail stays to hold the frame
@@ -163,7 +189,7 @@ document.querySelectorAll(".room[data-year]").forEach((room) => {
     media: room.querySelector("img.media"),
     film: room.querySelector(".film canvas"),
     player: null,
-    frames: null,
+    sheet: null,
     raf: null,
   };
   rec.ctx = rec.film.getContext("2d");

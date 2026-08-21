@@ -2,9 +2,16 @@
 
 Five moments of home video — 1992, 1994, 1995, 1997, 2002 — one picture each.
 
-Each stegassette holds the whole moment: the audio, a run of `frame-001…`
-JPEG stills at 6fps and 128px wide, and three text entries (`Metadata`,
-`Quote`, `Message`). There are no video or audio files on this page.
+Each stegassette holds the whole moment: the audio, a frame sheet — every
+still of the clip at 12fps and 128px wide, tiled into one JPEG, with a
+`frames.json` beside it holding the grid — and three text entries
+(`Metadata`, `Quote`, `Message`). There are no video or audio files on this
+page.
+
+A sheet is one entry however long the clip is, where a still per frame costs
+an entry each. The header counts entries in a single byte, so a per-frame
+sequence wraps past 255 and takes the entry table with it — which is what
+these clips do at this frame rate.
 
 The page is built on `geese/`: a promenade of rooms, one work to a room, each
 picture hung at its own native size against a veiled enlargement of itself.
@@ -20,17 +27,24 @@ The text entries are decoded and go unused for now. The page showed them on a
 card beside the clip — the scene, the year, the quote, and the note I wrote
 back to the kid in the picture. `git show 21fc663:kiddo/index.html` has it.
 
-The clip dissolves rather than cuts. Six frames a second is slow enough that
-a cut reads as a stutter, so each frame holds for the first part of its turn
-and crossfades into the next over the rest. `FADE` in `index.js` sets how
-much of the turn goes to the dissolve: 0 cuts, 1 never holds a frame still.
+The clip dissolves rather than cuts. Twelve frames a second is still slow
+enough that a cut reads as a stutter, so each frame holds for the first part
+of its turn and crossfades into the next over the rest. `FADE` in `index.js`
+sets how much of the turn goes to the dissolve: 0 cuts, 1 never holds a frame
+still.
 
 `index.js` drives `Stegassette.createRevealPlayer` from `../lib/stegassette.js`.
-The player exposes `entries`, so the stills and the text come straight off it.
+The player exposes `entries`, so the sheet and the text come straight off it.
 It gives no per-frame callback, so the clip runs off the player's own clock —
 `audioContext.currentTime - player.t0`, wrapped by `player.duration` — the
-same clock the reveal sweeps on.
+same clock the reveal sweeps on. The grid names its own frame rate, so the
+clip plays at the speed it was cut at rather than being stretched across
+whatever length the audio turned out to be.
 
 The pictures come from the `stegassette-jobs` pipeline
 (`jobs/kiddo.jobs.json`), which also generates `media/thumbs`. Each job pins
 its `seed` to its year, so a re-encode reproduces the file that ships here.
+The carrier grows to hold what it is given: the sheet is a larger payload
+than the stills were, so every picture came back from that re-encode bigger
+than it went in. `--og-width` and `--og-height` in the markup state those
+sizes, and a re-encode has to be copied back into them.
