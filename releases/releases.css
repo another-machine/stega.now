@@ -39,6 +39,7 @@ p {
   flex-direction: column;
   gap: var(--ht-space-2);
   text-decoration: none;
+  min-width: 0;
 }
 /* Block cards, not inline links: keep the system's ink-inversion hover off
    them (it paints the whole grid cell) and mark hover like a selected thumb —
@@ -54,8 +55,13 @@ p {
 .covers a:hover .covers__name {
   text-decoration: underline;
 }
+/* One square per release, whatever shape the artwork is. The releases run
+   from 16:9 video stills to portrait scans, so a natural-ratio grid steps
+   every row; contain keeps each piece whole inside its square instead. */
 .covers img {
   width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
   display: block;
 }
 /* the album cover: encoded by default, toggling to the decoded artwork */
@@ -80,6 +86,13 @@ p {
   color: var(--ht-ink);
 }
 
+/* the cover block: below the player, above the track grid */
+.cover-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ht-space-2);
+}
+
 /* release pages: the tappable grid of encoded images */
 .thumbs {
   display: grid;
@@ -92,6 +105,12 @@ p {
   display: flex;
   flex-direction: column;
   gap: var(--ht-space-2);
+  /* Grid and flex items floor at min-content by default, so the longest
+     caption widens its own track and the image overhangs the column. */
+  min-width: 0;
+  /* the row stretches every cell to its tallest, so pin the size line to the
+     bottom and the captions read along one line instead of stepping */
+  justify-content: space-between;
 }
 /* the face is the tappable part; the meta line under it stays outside the
    button so it can carry a real link */
@@ -108,6 +127,11 @@ p {
   display: flex;
   flex-direction: column;
   gap: var(--ht-space-2);
+  /* A button shrink-to-fits rather than stretching, so the longest caption
+     sets its width and the image — sized at 100% of the button — overhangs
+     the grid track. Fill the cell instead, and let the caption wrap. */
+  width: 100%;
+  min-width: 0;
 }
 .thumb img {
   width: 100%;
@@ -240,6 +264,11 @@ progress {
 #metaBody p {
   max-width: var(--ht-measure);
   white-space: pre-wrap; /* decoded text entries carry real newlines */
+}
+/* Prose written into the page, not decoded out of an image: pre-wrap would
+   render its source indentation as a real indent and first line break. */
+#metaBody p.release-note {
+  white-space: normal;
 }
 
 footer {

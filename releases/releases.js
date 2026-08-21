@@ -8,6 +8,14 @@
   const $ = (id) => document.getElementById(id);
   const td = new TextDecoder();
 
+  // How much of a frame's turn goes to dissolving into the next one. At 6fps a
+  // cut lands hard: a dissolve over the tail of each turn carries the motion
+  // without smearing the whole frame. 0 cuts, 1 never holds a frame still.
+  // The kiddo gallery draws its stills the same way.
+  const FRAME_FADE = 0.5;
+  // ease the ramp: a linear dissolve reads as a lurch through its midpoint
+  const smoothstep = (x) => x * x * (3 - 2 * x);
+
   const fmtBytes = (b) =>
     b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
   const fmtTime = (sec) => {
@@ -227,6 +235,11 @@
   const coverStatus = $("coverStatus");
   const coverProg = $("coverProg");
   const metaBody = $("metaBody");
+  // The cover art sits in its own block below the player, so a playing track's
+  // reveal and lyrics stay at the top of the page. Older pages without the
+  // container keep the art inline in the metadata block.
+  const coverArt = $("coverArt");
+  const coverHost = coverArt || metaBody;
 
   // The page shows the encoded thumbnail right away; the full cover download
   // replaces it once decoded, and a failure leaves a tappable retry.
@@ -237,7 +250,12 @@
     thumb.className = "cover-art";
     thumb.alt = "";
     thumb.src = Releases.thumb(rel, rel.cover.file);
-    coverStatus.parentNode.insertBefore(thumb, coverStatus);
+    if (coverArt) {
+      coverArt.append(thumb);
+      coverArt.hidden = false;
+    } else {
+      coverStatus.parentNode.insertBefore(thumb, coverStatus);
+    }
     loadCover();
   }
 
@@ -297,6 +315,7 @@
 
   function renderAlbumMeta(entries) {
     metaBody.textContent = "";
+    if (coverArt) coverArt.textContent = "";
     const a = album.album || {};
     const own = album.ownership || {};
     const au = album.audio || {};
@@ -311,7 +330,7 @@
       img.className = "cover-art";
       img.alt = "";
       img.src = encodedUrl || artUrl;
-      metaBody.append(img);
+      coverHost.append(img);
       const p = document.createElement("p");
       // view opens whichever version is showing, full size in its own tab
       const view = document.createElement("a");
@@ -335,7 +354,8 @@
         p.append(toggle, " · ");
       }
       p.append(view);
-      metaBody.append(p);
+      coverHost.append(p);
+      if (coverArt) coverArt.hidden = false;
     }
     const h2 = document.createElement("h2");
     h2.textContent = a.title || rel.name;
@@ -383,6 +403,85 @@
   let tickTimer = null;
   let dragging = false;
 
+  // A part carries its video either as a sheet (one bitmap, drawn by
+  // sub-rectangle) or as a bitmap per frame. Everything downstream goes
+  // through these two so it never has to care which.
+  function frameCount(p) {
+    if (!p) return 0;
+    if (p.sheet) return p.sheet.count;
+    return p.frames ? p.frames.length : 0;
+  }
+  function drawCell(ctx, p, idx) {
+    if (p.sheet) {
+      const { bitmap, cols, cellWidth: cw, cellHeight: ch } = p.sheet;
+      ctx.drawImage(bitmap, (idx % cols) * cw, Math.floor(idx / cols) * ch, cw, ch, 0, 0, cw, ch);
+    } else {
+      ctx.drawImage(p.frames[idx], 0, 0);
+    }
+  }
+
+  // `mix` is how far into the dissolve this frame is, 0-1. Both cells cover
+  // the canvas, so the outgoing frame needs no clear underneath.
+  function paintFrame(ctx, p, idx, mix) {
+    const n = frameCount(p);
+    if (!n) return;
+    drawCell(ctx, p, idx);
+    if (mix > 0) {
+      // a looping clip dissolves its last frame back into its first
+      ctx.globalAlpha = mix;
+      drawCell(ctx, p, (idx + 1) % n);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Where the playhead sits in frames, not seconds: the whole part picks the
+  // frame, the fraction is how far through its turn we are.
+  function paintFilm() {
+    if (!np || !np.frameCtx) return;
+    const pos = position();
+    const j = partAt(pos);
+    if (j < 0) return;
+    const p = np.parts[j];
+    const n = frameCount(p);
+    if (!n) return;
+    const fpos = ((pos - p.start) / p.dur) * n;
+    const idx = Math.min(n - 1, Math.max(0, Math.floor(fpos)));
+    const into = fpos - idx;
+    const mix = FRAME_FADE > 0
+      ? smoothstep(Math.min(1, Math.max(0, (into - 1 + FRAME_FADE) / FRAME_FADE)))
+      : 0;
+    // repaint only when something visibly moved; the dissolve makes that a
+    // matter of degree, so the mix is compared with a small tolerance
+    if (idx === np.frameIdx && Math.abs(mix - np.frameMix) < 0.004) return;
+    np.frameIdx = idx;
+    np.frameMix = mix;
+    paintFrame(np.frameCtx, p, idx, mix);
+  }
+
+  // The 100 ms tick is far too coarse for a dissolve — at 6fps a frame's turn
+  // is ~167 ms — so the film runs on its own rAF while the audio plays.
+  function runFilm() {
+    if (!np || np.filmRaf != null) return;
+    const chain = np;
+    const step = () => {
+      if (np !== chain || !chain.playing) {
+        chain.filmRaf = null;
+        return;
+      }
+      paintFilm();
+      chain.filmRaf = requestAnimationFrame(step);
+    };
+    chain.filmRaf = requestAnimationFrame(step);
+  }
+
+  function stopFilm(chain) {
+    const c = chain || np;
+    if (c && c.filmRaf != null) {
+      cancelAnimationFrame(c.filmRaf);
+      c.filmRaf = null;
+    }
+  }
+
   function ensureCtx() {
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") actx.resume();
@@ -393,7 +492,7 @@
     return {
       gen,
       expected, // how many parts the chain will eventually hold
-      parts: [], // {buffer, dur, start, img, opts, revealEntry, pair, frames, gridIdx}
+      parts: [], // {buffer, dur, start, img, opts, revealEntry, pair, frames, sheet, gridIdx}
       // Looping is per-source, so it is only sound for a chain of one; a
       // multi-part loop would stack overlapping sources.
       loop: rel.kind === "video" && expected === 1,
@@ -407,6 +506,8 @@
       revealObj: null,
       frameCtx: null, // canvas 2d context when the part carries video frames
       frameIdx: -1,
+      frameMix: -1, // last dissolve amount painted, see paintFilm()
+      filmRaf: null,
       lastPos: 0, // previous tick position, for loop-wrap detection
       lyrics: null,
       lyricEls: null,
@@ -454,6 +555,7 @@
       chain.sources = chain.sources.filter((x) => x !== s);
       if (s._idx !== chain.parts.length - 1) return; // the next part is already scheduled
       chain.playing = false;
+      stopFilm(chain);
       chain.base = chain.loadedDur;
       if (!allLoaded()) chain.stalled = true; // resume when the next part decodes
       npToggle.textContent = "play";
@@ -471,6 +573,7 @@
     np.startedAt = actx.currentTime + 0.03;
     np.playing = true;
     np.stalled = false;
+    runFilm();
     for (let j = 0; j < np.parts.length; j++) {
       const p = np.parts[j];
       if (p.start + p.dur <= np.base + 0.001) continue;
@@ -485,6 +588,7 @@
     if (!np || !np.playing) return;
     np.base = position();
     np.playing = false;
+    stopFilm();
     stopAll();
     npToggle.textContent = "play";
   }
@@ -545,17 +649,19 @@
     np.frameIdx = -1;
     npReveal.textContent = "";
     const part = np.parts[j];
-    if (part && part.frames && part.frames.length) {
+    if (frameCount(part)) {
       // Video cartridge: frames canvas plus the live develop, side by side.
       const c = document.createElement("canvas");
-      c.width = part.frames[0].width;
-      c.height = part.frames[0].height;
+      c.width = part.sheet ? part.sheet.cellWidth : part.frames[0].width;
+      c.height = part.sheet ? part.sheet.cellHeight : part.frames[0].height;
       c.className = "np-frames";
       npReveal.append(c);
       npReveal.hidden = false;
       np.frameCtx = c.getContext("2d");
-      np.frameCtx.drawImage(part.frames[0], 0, 0);
+      paintFrame(np.frameCtx, part, 0, 0);
       np.frameIdx = 0;
+      np.frameMix = 0;
+      runFilm();
     }
     if (!part || !part.img) {
       if (part && part.pair && !np.frameCtx) {
@@ -672,15 +778,9 @@
       const p = np.parts[j];
       np.revealObj.seek((pos - p.start) / p.dur);
     }
-    if (np.frameCtx && j >= 0) {
-      const p = np.parts[j];
-      const n = p.frames.length;
-      const idx = Math.min(n - 1, Math.max(0, Math.floor(((pos - p.start) / p.dur) * n)));
-      if (idx !== np.frameIdx) {
-        np.frameIdx = idx;
-        np.frameCtx.drawImage(p.frames[idx], 0, 0);
-      }
-    }
+    // keeps the still correct while paused or seeking; playback repaints on
+    // its own rAF, which this is far too slow to drive
+    paintFilm();
     if (np.lyrics && np.lyricEls) {
       const ms = pos * 1000;
       const idx = lyricAt(np.lyrics, ms);
@@ -838,14 +938,33 @@
       for (let c = 0; c < parsed.channels.length; c++) buffer.getChannelData(c).set(parsed.channels[c]);
     }
     let frames = null;
+    let sheet = null;
     if (rel.kind === "video") {
-      const frameEntries = entries
-        .filter((e) => /^frame-\d+$/.test(e.name) && /^image\//.test(e.mimetype))
-        .sort((a, b) => parseInt(a.name.slice(6), 10) - parseInt(b.name.slice(6), 10));
-      if (frameEntries.length) {
-        frames = await Promise.all(
-          frameEntries.map((e) => createImageBitmap(new Blob([e.data], { type: e.mimetype }))),
-        );
+      // A frame sheet is every frame tiled into one entry, described by a
+      // sibling json. One decode and one bitmap, however long the video —
+      // where a per-frame sequence costs an entry each and wraps past 255.
+      const sheetEntry = entries.find((e) => e.name === "frames" && /^image\//.test(e.mimetype));
+      const gridEntry = entries.find((e) => e.name === "frames.json");
+      if (sheetEntry && gridEntry) {
+        const grid = JSON.parse(textOf(gridEntry));
+        sheet = {
+          bitmap: await createImageBitmap(
+            new Blob([sheetEntry.data], { type: sheetEntry.mimetype }),
+          ),
+          cols: grid.cols,
+          cellWidth: grid.cellWidth,
+          cellHeight: grid.cellHeight,
+          count: grid.count,
+        };
+      } else {
+        const frameEntries = entries
+          .filter((e) => /^frame-\d+$/.test(e.name) && /^image\//.test(e.mimetype))
+          .sort((a, b) => parseInt(a.name.slice(6), 10) - parseInt(b.name.slice(6), 10));
+        if (frameEntries.length) {
+          frames = await Promise.all(
+            frameEntries.map((e) => createImageBitmap(new Blob([e.data], { type: e.mimetype }))),
+          );
+        }
       }
     }
     return {
@@ -857,6 +976,7 @@
         !oversized && audioEntry.data && audioEntry.data.length <= REVEAL_ENTRY_MAX
           ? audioEntry
           : null,
+      sheet,
       pair,
       revealNote: oversized ? "too big to animate decoding" : null,
       frames,
@@ -874,16 +994,16 @@
     ensureCtx(); // inside the tap gesture
     pause();
     if (np) {
+      stopFilm();
       // Release the superseded chain's frame bitmaps (GPU-backed).
       for (const p of np.parts) {
-        if (p.frames) {
-          for (const b of p.frames) {
-            try {
-              b.close();
-            } catch (e) {}
-          }
-          p.frames = null;
+        for (const b of p.sheet ? [p.sheet.bitmap] : p.frames || []) {
+          try {
+            b.close();
+          } catch (e) {}
         }
+        p.frames = null;
+        p.sheet = null;
       }
     }
     np = mkChain(gen, indices.length);

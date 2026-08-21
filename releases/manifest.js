@@ -4,8 +4,25 @@
 "use strict";
 const Releases = {
   cdn: "https://cdn.stegassette.amplib.tech",
-  order: ["cwrc-lofi", "cwrc", "rhir", "idles"],
+  order: ["cwrc-lofi", "cwrc", "rhir", "idles", "tt"],
   byId: {
+    tt: {
+      id: "tt",
+      kind: "video",
+      name: "twisted teens live in london",
+      line: "seven songs · third man's blue basement · 8-bit mono",
+      prefix: "tt",
+      cover: null,
+      items: [
+        { file: "01-is-it-real.png", bytes: 21781713 },
+        { file: "02-valley-spirit-never-dies.png", bytes: 18773529 },
+        { file: "03-rando.png", bytes: 22182719 },
+        { file: "04-tic-tac-toe.png", bytes: 24418490 },
+        { file: "05-sister-heat.png", bytes: 22058068 },
+        { file: "06-waiting-for-the-whip.png", bytes: 23065262 },
+        { file: "07-when-the-wire-get-cut.png", bytes: 21085203 },
+      ],
+    },
     "cwrc-lofi": {
       id: "cwrc-lofi",
       kind: "album",
