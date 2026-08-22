@@ -89,9 +89,15 @@ stegassette and deletes it with the stegassette.
 - [me](me/) — a stegassette of you. Record yourself, lay frames out in a
   template, and hide the recording's own audio in the picture. Or record a
   message into images you already have.
-- [mix](mix/) — loops that know what they are. It makes stegassettes that
-  carry a seamless loop plus its tempo, key, and downbeat position. It
-  plays any number of them together, matched in beat and key.
+- [loop](loop/) — the loop editor. It makes stegassettes that carry a
+  seamless loop plus its tempo, key, and downbeat position — one loop, or
+  a pack of them in one picture. Its `format.js` is the stega-mix
+  format's one home; the mixer imports it in place and stegassette-jobs
+  carries a committed copy. `/mix` used to be this and the mixer in one
+  page; a stub there redirects.
+- [mixer](mixer/) — plays any number of loop stegassettes together,
+  matched in beat and key. Two channels, stacked decks, a crossfader,
+  and per-deck pitched or tape engines.
 
 ---
 

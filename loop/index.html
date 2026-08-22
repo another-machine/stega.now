@@ -1,0 +1,1259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stegassette/loop</title>
+    <link rel="stylesheet" href="../ui.css" />
+    <style>
+      /* Screen-specific layout on top of amplib-ui. Type, controls,
+         fieldsets, the drop target and the list rows all come from the
+         system; what is left here is this screen's arrangement and the one
+         thing that exists only here — the loop editor over the waveform. */
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        width: 100%;
+      }
+      fieldset {
+        margin: 0;
+        width: 100%;
+      }
+      /* the title links home; the hover polarity is the affordance, so it
+         does not need a rule under it too */
+      h1 a {
+        text-decoration: none;
+      }
+      .ht-arrange-sidebar {
+        --ht-sidebar: 20rem;
+        width: 100%;
+      }
+      .ht-arrange-sidebar > :first-child {
+        min-width: 0;
+      }
+      .cols {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-flow);
+        min-width: 0;
+      }
+
+      /* ── the loop editor ──────────────────────────────────────────────
+         One canvas, drawn every time anything changes: the waveform, every
+         loop region on the take, the beat grid of the selected one, and its
+         downbeat. Start, end and downbeat are handles you drag. */
+      .stage {
+        position: relative;
+        width: 100%;
+        border: var(--ht-hairline) solid var(--ht-ink);
+      }
+      .stage canvas {
+        display: block;
+        width: 100%;
+        height: 180px;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      /* The whole file at a glance, with the zoomed view drawn over it. At any
+         useful zoom the main canvas shows a second or two, which is no way to
+         know where you are in a four-minute take. */
+      .stage.overview {
+        border-block-start: 0;
+      }
+      .stage.overview canvas {
+        height: 40px;
+        cursor: grab;
+      }
+      .stage.overview canvas:active {
+        cursor: grabbing;
+      }
+      /* Moved with a transform on its own element rather than drawn into the
+         canvas: the waveform costs a pass over every visible sample, which is
+         not a thing to redo sixty times a second to move one line. */
+      .playhead {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: 2px;
+        background: var(--ht-ink);
+        pointer-events: none;
+        will-change: transform;
+      }
+      .readout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-4);
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+      }
+      .readout b {
+        font-weight: 400;
+        opacity: 0.5;
+        margin-inline-end: var(--ht-space-2);
+      }
+
+      .list__item button {
+        min-width: 0;
+        padding: 0 var(--ht-space-2);
+      }
+
+      .thumbs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-2);
+      }
+      .thumbs img {
+        width: 4rem;
+        height: 4rem;
+        object-fit: cover;
+        border: var(--ht-hairline) solid var(--ht-line);
+        cursor: pointer;
+      }
+      .thumbs img[data-used] {
+        border-color: var(--ht-ink);
+      }
+      .out a {
+        font-family: var(--ht-font-mono);
+      }
+      .notes {
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+        opacity: 0.6;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body data-theme="auto" data-density="compact">
+    <h1><a href="/">stegassette</a>/loop</h1>
+
+    <section id="make">
+      <div class="drop" id="makeDrop" data-state="empty" tabindex="0">
+        <div class="drop__label">drop audio and a picture</div>
+        <div class="drop__sub">audio becomes loops</div>
+      </div>
+      <input id="makeFiles" type="file" multiple hidden />
+
+      <div class="ht-arrange-sidebar" id="makeBody" hidden>
+        <div class="cols">
+          <fieldset>
+            <legend>loops</legend>
+            <div class="list" id="loopList"></div>
+          </fieldset>
+
+          <fieldset>
+            <legend>the loop</legend>
+            <div class="stage">
+              <canvas id="wave" width="2400" height="360"></canvas>
+              <div class="playhead" id="playhead" hidden></div>
+            </div>
+            <div class="stage overview">
+              <canvas id="mini" width="2400" height="80"></canvas>
+              <div class="playhead" id="playheadMini" hidden></div>
+            </div>
+            <div class="readout" id="loopRead"></div>
+            <div class="u-faint ht-type-small" id="detectNote"></div>
+            <div class="ht-arrange-row">
+              <button id="bPreview">▶ loop it</button>
+              <button id="bAddLoop">add loop</button>
+              <button id="bDetect">detect</button>
+              <button id="bFitAll">fit file</button>
+              <button id="bFitLoop">fit loop</button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>the picture</legend>
+            <div class="thumbs" id="carriers"></div>
+          </fieldset>
+
+          <div class="toolbar">
+            <button id="bEncode">encode ↓</button>
+            <span class="status" id="makeStatus"></span>
+          </div>
+          <div class="out" id="makeOut"></div>
+          <div class="notes" id="makeNotes"></div>
+        </div>
+
+        <div class="cols">
+          <fieldset class="fieldset-stack">
+            <legend>musical</legend>
+            <div class="field">
+              <label for="fBeats">beats</label>
+              <input id="fBeats" type="number" min="1" step="1" value="8" />
+            </div>
+            <div class="field">
+              <label for="fMeter">per bar</label>
+              <input id="fMeter" type="number" min="1" step="1" value="4" />
+            </div>
+            <div class="field">
+              <label>bpm</label>
+              <output id="oBpm" class="ht-type-code">—</output>
+            </div>
+            <div class="field">
+              <label for="fRoot">key</label>
+              <select id="fRoot"></select>
+            </div>
+            <div class="field">
+              <label for="fMode">mode</label>
+              <select id="fMode"></select>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset-stack">
+            <legend>identity</legend>
+            <div class="field">
+              <label for="fTitle">title</label>
+              <input id="fTitle" type="text" />
+            </div>
+            <div class="field">
+              <label for="fArtist">artist</label>
+              <input id="fArtist" type="text" />
+            </div>
+            <div class="field">
+              <label for="fPack">pack</label>
+              <input id="fPack" type="text" placeholder="named after the picture" />
+            </div>
+            <p class="field__hint" id="sizeNote"></p>
+          </fieldset>
+        </div>
+      </div>
+    </section>
+
+    <script src="../lib/stegassette.js"></script>
+    <script src="../lib/music-detection.js"></script>
+    <script type="module">
+      import {
+        NOTES,
+        MODE_NAMES,
+        fmtBpm,
+        fmtTime,
+        keyLabel,
+      } from "./format.js";
+      import {
+        RATE,
+        BITS,
+        decodeAudioFile,
+        fitChannels,
+        sliceChannels,
+        channelsFor,
+        encodePack,
+      } from "./encode.js";
+
+      const $ = (id) => document.getElementById(id);
+      const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|aiff?|caf)$/i;
+      const IMAGE_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+
+      // A dropped folder arrives as directory entries, so walk them to get the
+      // files inside — same result as the file picker.
+      async function filesFromDrop(dt) {
+        const out = [];
+        const entries = [...(dt.items || [])]
+          .map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null))
+          .filter(Boolean);
+        if (!entries.length) return [...(dt.files || [])];
+        async function walk(entry) {
+          if (entry.isFile) {
+            out.push(await new Promise((res, rej) => entry.file(res, rej)));
+          } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            for (;;) {
+              const batch = await new Promise((res, rej) =>
+                reader.readEntries(res, rej)
+              );
+              if (!batch.length) break;
+              for (const e of batch) await walk(e);
+            }
+          }
+        }
+        for (const e of entries) await walk(e);
+        return out;
+      }
+      function wireDrop(el, input, onFiles) {
+        for (const t of ["dragenter", "dragover"])
+          el.addEventListener(t, (e) => {
+            e.preventDefault();
+            el.dataset.state = "over";
+          });
+        for (const t of ["dragleave", "drop"])
+          el.addEventListener(t, (e) => {
+            e.preventDefault();
+            delete el.dataset.state;
+          });
+        el.addEventListener("drop", async (e) => {
+          e.preventDefault();
+          onFiles(await filesFromDrop(e.dataTransfer));
+        });
+        el.addEventListener("click", () => input.click());
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") input.click();
+        });
+        input.addEventListener("change", () => onFiles([...input.files]));
+      }
+
+      // The twelve names and the modes come from the format, so a menu can
+      // never offer something a mixer does not understand.
+      function fillNotes(sel, value) {
+        sel.innerHTML = NOTES.map(
+          (n) => `<option${n === value ? " selected" : ""}>${n}</option>`
+        ).join("");
+      }
+      function fillModes(sel, value) {
+        sel.innerHTML = MODE_NAMES.map(
+          (n) => `<option${n === value ? " selected" : ""}>${n}</option>`
+        ).join("");
+      }
+      fillNotes($("fRoot"), "C");
+      fillModes($("fMode"), "major");
+
+      /* ── the model ───────────────────────────────────────────────────
+         A take is a decoded audio file. A loop is a region of one:
+         movable start and end, a beat count that says how many beats the
+         region holds, and a downbeat. One take can carry any number of
+         loops, and the loops list — across every take — is the pack, in
+         order.
+
+         The tempo is never typed and never measured separately: it is the
+         region's length divided by its beats, and the grid drawn from that
+         claim shows on the waveform whether it is true. */
+
+      const takes = [];
+      const loops = [];
+      let carriers = [];
+      let carrierSel = 0;
+      let current = -1;
+
+      const sel = () => (current >= 0 ? loops[current] : null);
+      const takeOf = (l) => takes[l.take];
+      const carrierFile = () =>
+        carriers.length ? carriers[carrierSel % carriers.length].file : null;
+
+      const loopLen = (l) => l.end - l.start;
+      const period = (l) => loopLen(l) / l.beats;
+      const bpmOf = (l) => (60 * takeOf(l).sampleRate) / period(l);
+      // The downbeat is a handle. Until it is moved it rides the start.
+      const downbeatOf = (l) => l.downbeat ?? l.start;
+      const originOf = (l) => {
+        const len = loopLen(l);
+        return (((downbeatOf(l) - l.start) % len) + len) % len;
+      };
+      const MIN_LOOP = 256;
+
+      function titleFromName(name) {
+        return name
+          .replace(/\.[^.]+$/, "")
+          .replace(/^\s*\d+\s*[-._)]*\s*/, "")
+          .trim();
+      }
+
+      /* ── detection ───────────────────────────────────────────────────
+         A suggestion, never a commitment: it proposes a region, a beat
+         count and a key, and every one of them is a handle or a field you
+         then move. Runs once when a take arrives, and again from the
+         button. Key is decimated to 16 kHz inside the package; onsets are
+         not, since they need the timing. */
+
+      function detectProposal(t) {
+        const mono = MusicDetection.toMono(t.channels);
+        const found = { key: null, beats: null };
+        const region = { start: 0, end: t.frames, beats: 16, root: null, mode: null };
+
+        // Written whatever the confidence, with the number beside it. An
+        // empty field reads as nothing detected; a filled one you disagree
+        // with is a dropdown away. The runner-up is usually the relative
+        // key — the same seven notes, so `scale` matching cannot tell them
+        // apart and only the label is at stake.
+        const k = MusicDetection.detectKey(mono, t.sampleRate);
+        if (k.atonal) {
+          found.key = "no pitched content — set mode to none if percussion";
+        } else {
+          region.root = k.root;
+          region.mode = k.mode;
+          found.key =
+            k.root +
+            " " +
+            k.mode +
+            " (" +
+            Math.round(k.confidence * 100) +
+            "%" +
+            (k.runnerUp ? ", or " + k.runnerUp.root + " " + k.runnerUp.mode : "") +
+            ")";
+        }
+
+        // A loop and a song are different questions. A loop spans a whole
+        // number of beats, so its length answers for the tempo and only the
+        // integer has to be found. A song does not: every loop-beat
+        // candidate lands under the tempo floor, detectLoopBeats returns
+        // nothing, and the tempo comes from autocorrelation instead — with
+        // the whole file left as the region, for you to cut.
+        const lb = MusicDetection.detectLoopBeats(mono, t.sampleRate);
+        const looped = lb.beats > 0;
+        const est = looped ? lb : MusicDetection.detectTempo(mono, t.sampleRate);
+        if (!est.bpm) return { found, region };
+
+        const per = (60 * t.sampleRate) / est.bpm;
+        if (looped) {
+          region.beats = lb.beats;
+          const start = Math.round(est.phase ?? 0);
+          const end = start + Math.round(lb.beats * per);
+          if (end <= t.frames) {
+            region.start = start;
+            region.end = end;
+          }
+        }
+        found.beats =
+          (looped
+            ? lb.beats + " beats at " + fmtBpm(est.bpm) + " bpm"
+            : fmtBpm(est.bpm) + " bpm — longer than a loop, so cut a region") +
+          " (" +
+          Math.round(est.confidence * 100) +
+          "%)" +
+          " · half " +
+          fmtBpm(est.bpm / 2) +
+          " / double " +
+          fmtBpm(est.bpm * 2) +
+          (looped && lb.alternatives.length
+            ? " · also fits " +
+              lb.alternatives
+                .slice(0, 2)
+                .map((a) => a.beats)
+                .join(" / ")
+            : "");
+        return { found, region };
+      }
+
+      function applyProposal(l, { found, region }, ms, detectNote) {
+        l.start = region.start;
+        l.end = region.end;
+        l.beats = region.beats;
+        l.downbeat = null;
+        if (region.root) l.root = region.root;
+        if (region.mode) l.mode = region.mode;
+        l.found = { ...found, ms, note: detectNote };
+      }
+
+      async function takeMakeFiles(files) {
+        const byName = (a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true });
+        const audio = [...files].filter((f) => AUDIO_RE.test(f.name)).sort(byName);
+        const images = [...files].filter((f) => IMAGE_RE.test(f.name)).sort(byName);
+
+        if (images.length) {
+          for (const img of carriers) URL.revokeObjectURL(img.url);
+          carriers = images.map((f) => ({ file: f, url: URL.createObjectURL(f) }));
+          carrierSel = 0;
+        }
+
+        for (const f of audio) {
+          status("decoding " + f.name, "busy");
+          try {
+            const decoded = await decodeAudioFile(f, RATE);
+            const t = {
+              file: f,
+              name: f.name,
+              channels: decoded.channels,
+              sampleRate: decoded.sampleRate,
+              frames: decoded.frames,
+              miniEnv: null,
+            };
+            takes.push(t);
+            // Every take arrives with one loop already proposed, so the
+            // common case is dragging a handle rather than building a
+            // region from nothing.
+            const l = {
+              take: takes.length - 1,
+              start: 0,
+              end: t.frames,
+              beats: 16,
+              meter: 4,
+              downbeat: null,
+              root: "C",
+              mode: "major",
+              title: titleFromName(f.name),
+              found: null,
+            };
+            const t0 = performance.now();
+            try {
+              applyProposal(
+                l,
+                detectProposal(t),
+                Math.round(performance.now() - t0),
+                "detected "
+              );
+            } catch (err) {
+              note("detect " + f.name + ": " + err.message);
+            }
+            loops.push(l);
+          } catch (err) {
+            note(f.name + ": " + err.message);
+          }
+        }
+        status("", "");
+        if (loops.length || carriers.length) {
+          $("makeDrop").dataset.state = "ready";
+          $("makeBody").hidden = false;
+          if (loops.length)
+            select(Math.min(Math.max(current, 0), loops.length - 1));
+          else renderCarriers();
+        }
+      }
+
+      /* ── the loops list ──────────────────────────────────────────────
+         Every region on every take, in pack order. */
+
+      function renderLoops() {
+        $("loopList").innerHTML = loops
+          .map(
+            (l, i) =>
+              `<div class="list__item" data-i="${i}"${
+                i === current ? ' aria-selected="true"' : ""
+              }>` +
+              `<span class="list__index">${i + 1}</span>` +
+              `<span class="list__name u-truncate">${l.title || takeOf(l).name}</span>` +
+              `<span class="list__meta">${fmtBpm(bpmOf(l))} bpm · ${
+                l.beats
+              } beats · ${keyLabel(l)}</span>` +
+              `<button data-role="up" title="move up — order is pack order"${
+                i === 0 ? " disabled" : ""
+              }>↑</button>` +
+              `<button data-role="rm" title="remove this loop">✕</button></div>`
+          )
+          .join("");
+        for (const el of $("loopList").children) {
+          const i = +el.dataset.i;
+          el.addEventListener("click", () => select(i));
+          el.querySelector('[data-role="up"]').addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (i === 0) return;
+            [loops[i - 1], loops[i]] = [loops[i], loops[i - 1]];
+            if (current === i) current = i - 1;
+            else if (current === i - 1) current = i;
+            select(current);
+          });
+          el.querySelector('[data-role="rm"]').addEventListener("click", (e) => {
+            e.stopPropagation();
+            loops.splice(i, 1);
+            if (!loops.length) {
+              current = -1;
+              $("makeBody").hidden = !carriers.length;
+              $("makeDrop").dataset.state = carriers.length ? "ready" : "empty";
+              renderLoops();
+              renderCarriers();
+              return;
+            }
+            select(Math.min(current >= i ? current - 1 : current, loops.length - 1));
+          });
+        }
+      }
+
+      function renderCarriers() {
+        $("carriers").innerHTML = carriers
+          .map(
+            (c, i) =>
+              `<img src="${c.url}" alt="${c.file.name}" title="${c.file.name}"${
+                i === carrierSel % Math.max(1, carriers.length) ? " data-used" : ""
+              } />`
+          )
+          .join("");
+        [...$("carriers").children].forEach((img, i) =>
+          img.addEventListener("click", () => {
+            carrierSel = i;
+            renderCarriers();
+          })
+        );
+      }
+
+      function select(i) {
+        const changedTake = !sel() || loops[i].take !== sel().take;
+        current = i;
+        const l = sel();
+        if (!l) return;
+        $("fBeats").value = l.beats;
+        $("fMeter").value = l.meter;
+        $("fRoot").value = l.root;
+        $("fMode").value = l.mode;
+        $("fTitle").value = l.title;
+        $("detectNote").textContent = l.found
+          ? (l.found.note || "") +
+            [l.found.beats, l.found.key].filter(Boolean).join(" · ") +
+            " · " +
+            l.found.ms +
+            "ms"
+          : "";
+        if (changedTake) fitAll();
+        renderLoops();
+        renderCarriers();
+        redraw();
+      }
+
+      // Sidebar edits write straight back to the selected loop.
+      for (const [id, key, cast] of [
+        ["fBeats", "beats", (v) => Math.max(1, parseInt(v, 10) || 1)],
+        ["fMeter", "meter", (v) => Math.max(1, parseInt(v, 10) || 1)],
+        ["fRoot", "root", (v) => v],
+        ["fMode", "mode", (v) => v],
+        ["fTitle", "title", (v) => v],
+      ]) {
+        $(id).addEventListener("input", () => {
+          const l = sel();
+          if (!l) return;
+          l[key] = cast($(id).value);
+          renderLoops();
+          redraw();
+        });
+      }
+
+      /* ── add loop ────────────────────────────────────────────────────
+         A new region on the selected loop's take, placed right after it at
+         the same length — the next section of the song, usually — with the
+         same beats and key. Handles from there. */
+
+      $("bAddLoop").addEventListener("click", () => {
+        const l = sel();
+        if (!l) return;
+        const t = takeOf(l);
+        const len = loopLen(l);
+        let start = l.end;
+        let end = start + len;
+        if (end > t.frames) {
+          // No room after: drop it over the middle of the current view.
+          const mid = view.offset + view.span / 2;
+          start = Math.max(0, Math.round(mid - len / 2));
+          end = Math.min(t.frames, start + len);
+          start = Math.max(0, end - len);
+        }
+        const n = loops.filter((x) => x.take === l.take).length + 1;
+        loops.splice(current + 1, 0, {
+          take: l.take,
+          start,
+          end,
+          beats: l.beats,
+          meter: l.meter,
+          downbeat: null,
+          root: l.root,
+          mode: l.mode,
+          title: l.title + " " + n,
+          found: null,
+        });
+        select(current + 1);
+        fitLoop();
+        redraw();
+      });
+
+      $("bDetect").addEventListener("click", () => {
+        const l = sel();
+        if (!l) return;
+        const t0 = performance.now();
+        applyProposal(
+          l,
+          detectProposal(takeOf(l)),
+          Math.round(performance.now() - t0),
+          "detected "
+        );
+        select(current);
+        fitLoop();
+        redraw();
+      });
+
+      // ── the waveform ────────────────────────────────────────────────
+      const cv = $("wave");
+      const cx = cv.getContext("2d");
+      const mini = $("mini");
+      const mcx = mini.getContext("2d");
+
+      // The visible window, in samples. Zoomed in, a drag lands on a
+      // transient rather than near one.
+      let view = { offset: 0, span: 1 };
+
+      function clampView() {
+        const l = sel();
+        if (!l) return;
+        const t = takeOf(l);
+        view.span = Math.max(256, Math.min(t.frames, view.span));
+        view.offset = Math.max(0, Math.min(t.frames - view.span, view.offset));
+      }
+      function fitAll() {
+        const l = sel();
+        if (!l) return;
+        view = { offset: 0, span: takeOf(l).frames };
+      }
+      function fitLoop() {
+        const l = sel();
+        if (!l) return;
+        const len = loopLen(l);
+        view = { offset: Math.max(0, l.start - len * 0.05), span: len * 1.1 };
+        clampView();
+      }
+      function zoomBy(factor, anchorFrame) {
+        if (!sel()) return;
+        const a = anchorFrame ?? view.offset + view.span / 2;
+        const rel = (a - view.offset) / view.span;
+        view.span = view.span * factor;
+        clampView();
+        view.offset = a - rel * view.span;
+        clampView();
+        redraw();
+      }
+
+      function ink() {
+        return getComputedStyle(document.body).color;
+      }
+
+      /** Peak envelope of `channels` over [from, to), drawn into w columns. */
+      function envelope(channels, from, to, w) {
+        const out = new Float32Array(w * 2);
+        const step = (to - from) / w;
+        for (let x = 0; x < w; x++) {
+          const a = Math.max(0, Math.floor(from + x * step));
+          const b = Math.min(channels[0].length, Math.floor(from + (x + 1) * step));
+          let lo = 0;
+          let hi = 0;
+          for (const d of channels)
+            for (let i = a; i < b; i++) {
+              if (d[i] < lo) lo = d[i];
+              if (d[i] > hi) hi = d[i];
+            }
+          out[x * 2] = lo;
+          out[x * 2 + 1] = hi;
+        }
+        return out;
+      }
+
+      function redraw() {
+        const l = sel();
+        const W = cv.width;
+        const H = cv.height;
+        cx.clearRect(0, 0, W, H);
+        mcx.clearRect(0, 0, mini.width, mini.height);
+        if (!l) return;
+        const t = takeOf(l);
+        const color = ink();
+        clampView();
+
+        const from = view.offset;
+        const to = view.offset + view.span;
+        const px = (frame) => ((frame - from) / view.span) * W;
+        const mid = H / 2;
+
+        const env = envelope(t.channels, from, to, W);
+        cx.globalAlpha = 0.35;
+        cx.fillStyle = color;
+        for (let x = 0; x < W; x++) {
+          const lo = env[x * 2];
+          const hi = env[x * 2 + 1];
+          cx.fillRect(x, mid - hi * mid, 1, Math.max(1, (hi - lo) * mid));
+        }
+        cx.globalAlpha = 1;
+
+        // outside the selected loop, knocked back
+        const s = px(l.start);
+        const e = px(l.end);
+        cx.globalCompositeOperation = "destination-out";
+        cx.globalAlpha = 0.55;
+        cx.fillStyle = color;
+        if (s > 0) cx.fillRect(0, 0, s, H);
+        if (e < W) cx.fillRect(e, 0, W - e, H);
+        cx.globalCompositeOperation = "source-over";
+        cx.globalAlpha = 1;
+
+        // The other loops on this take: a band along the top, so they are
+        // findable without competing with the one being edited. Click one
+        // to select it.
+        for (let i = 0; i < loops.length; i++) {
+          const o = loops[i];
+          if (i === current || o.take !== l.take) continue;
+          const os = px(o.start);
+          const oe = px(o.end);
+          if (oe < 0 || os > W) continue;
+          cx.globalAlpha = 0.3;
+          cx.fillStyle = color;
+          cx.fillRect(Math.max(0, os), 0, Math.min(W, oe) - Math.max(0, os), 6);
+          cx.fillRect(Math.round(os), 0, 2, 16);
+          cx.fillRect(Math.round(oe) - 2, 0, 2, 16);
+          cx.globalAlpha = 1;
+        }
+
+        // The beat grid, drawn from the loop's own claim: length over
+        // beats, anchored on the downbeat. If the count is wrong, the
+        // lines sit off the music — that is the readout that matters.
+        const per = period(l);
+        const meter = l.meter || 4;
+        if (per > 0) {
+          const anchor = downbeatOf(l);
+          const k0 = Math.floor((from - anchor) / per);
+          const maxLines = 4000; // a fully zoomed-out song would draw millions
+          if ((to - from) / per <= maxLines) {
+            for (let k = k0; ; k++) {
+              const f = anchor + k * per;
+              if (f > to) break;
+              const x = Math.round(px(f));
+              if (x < -2 || x > W + 2) continue;
+              const bar = ((k % meter) + meter) % meter === 0;
+              cx.globalAlpha = bar ? 0.7 : 0.25;
+              cx.fillStyle = color;
+              cx.fillRect(x, bar ? 0 : H * 0.3, 1, bar ? H : H * 0.4);
+            }
+            cx.globalAlpha = 1;
+          }
+        }
+
+        // start and end, with their corner handles
+        cx.fillStyle = color;
+        cx.fillRect(Math.round(s) - 1, 0, 2, H);
+        cx.fillRect(Math.round(e) - 1, 0, 2, H);
+        cx.beginPath();
+        cx.moveTo(Math.round(s), 0);
+        cx.lineTo(Math.round(s) + 22, 0);
+        cx.lineTo(Math.round(s), 22);
+        cx.closePath();
+        cx.fill();
+        cx.beginPath();
+        cx.moveTo(Math.round(e), 0);
+        cx.lineTo(Math.round(e) - 22, 0);
+        cx.lineTo(Math.round(e), 22);
+        cx.closePath();
+        cx.fill();
+
+        // the downbeat: a kite at the top of its line, so it reads as a
+        // handle rather than another mark
+        const d = px(downbeatOf(l));
+        if (d > -20 && d < W + 20) {
+          cx.fillRect(Math.round(d) - 1, 0, 3, H);
+          cx.beginPath();
+          cx.moveTo(d, 0);
+          cx.lineTo(d + 9, 13);
+          cx.lineTo(d, 26);
+          cx.lineTo(d - 9, 13);
+          cx.closePath();
+          cx.fill();
+        }
+
+        drawMini(t, l, color);
+        readout();
+      }
+
+      function drawMini(t, l, color) {
+        const W = mini.width;
+        const H = mini.height;
+        const mid = H / 2;
+        // The mini never changes with the view, so its envelope is computed
+        // once per take and kept.
+        if (!t.miniEnv) t.miniEnv = envelope(t.channels, 0, t.frames, W);
+        const env = t.miniEnv;
+        mcx.globalAlpha = 0.3;
+        mcx.fillStyle = color;
+        for (let x = 0; x < W; x++) {
+          const lo = env[x * 2];
+          const hi = env[x * 2 + 1];
+          mcx.fillRect(x, mid - hi * mid, 1, Math.max(1, (hi - lo) * mid));
+        }
+        const mpx = (f) => (f / t.frames) * W;
+        // every loop on this take, the selected one strongest
+        for (let i = 0; i < loops.length; i++) {
+          const o = loops[i];
+          if (o.take !== l.take) continue;
+          mcx.globalAlpha = i === current ? 0.5 : 0.2;
+          mcx.fillRect(mpx(o.start), 0, Math.max(1, mpx(loopLen(o))), H);
+        }
+        mcx.globalAlpha = 1;
+        // the window the main canvas is showing
+        const vx = mpx(view.offset);
+        const vw = Math.max(2, mpx(view.span));
+        mcx.strokeStyle = color;
+        mcx.lineWidth = 2;
+        mcx.strokeRect(vx + 1, 1, vw - 2, H - 2);
+      }
+
+      function readout() {
+        const l = sel();
+        if (!l) return;
+        const t = takeOf(l);
+        const len = loopLen(l);
+        const bpm = bpmOf(l);
+        const rel = originOf(l);
+        $("oBpm").textContent = fmtBpm(bpm);
+        $("loopRead").innerHTML = [
+          ["bpm", fmtBpm(bpm)],
+          ["loop", fmtTime(len / t.sampleRate) + " · " + len + " frames"],
+          [
+            "bars",
+            (l.beats / (l.meter || 4)).toFixed(2).replace(/\.00$/, "") +
+              " × " +
+              (l.meter || 4),
+          ],
+          [
+            "downbeat",
+            rel + (rel ? " (" + fmtTime(rel / t.sampleRate) + " in)" : " — at the start"),
+          ],
+          ["key", keyLabel(l)],
+          ["zoom", (t.frames / view.span).toFixed(1) + "×"],
+          ...(period(l) > 0 && view.span / period(l) > 4000
+            ? [["grid", "too dense to draw — zoom in"]]
+            : []),
+        ]
+          .map(([k, v]) => `<span><b>${k}</b>${v}</span>`)
+          .join("");
+
+        // The whole encode, not just this loop: a pack is one payload.
+        const bytes = loops.reduce(
+          (sum, x) =>
+            sum + loopLen(x) * channelsFor(takeOf(x).channels) * (BITS / 8),
+          0
+        );
+        $("sizeNote").textContent =
+          "payload ≈ " +
+          (bytes / 1024 / 1024).toFixed(2) +
+          " MB · " +
+          loops.length +
+          " loop" +
+          (loops.length === 1 ? "" : "s");
+      }
+
+      /* ── the handles ─────────────────────────────────────────────────
+         Start, end and downbeat are dragged, not placed: pointer down near
+         one grabs it, and the frame under the pointer becomes its new
+         position until release. Down on another loop's band selects that
+         loop. There are no modes. */
+
+      const frameAt = (e, el) => {
+        const r = el.getBoundingClientRect();
+        const x = Math.min(Math.max(0, e.clientX - r.left), r.width);
+        return Math.round(view.offset + (x / r.width) * view.span);
+      };
+      const HIT = 8;
+      const SNAP_PX = 10;
+      let dragging = null;
+
+      function hitTest(e) {
+        const l = sel();
+        if (!l) return null;
+        const r = cv.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        const tol = HIT;
+        const xOf = (f) => ((f - view.offset) / view.span) * r.width;
+        // the downbeat's kite owns the top band around its line
+        if (y < 20 && Math.abs(x - xOf(downbeatOf(l))) <= tol + 4)
+          return { grab: "downbeat" };
+        if (Math.abs(x - xOf(l.start)) <= tol) return { grab: "start" };
+        if (Math.abs(x - xOf(l.end)) <= tol) return { grab: "end" };
+        // another loop's band along the top selects it
+        if (y < 16)
+          for (let i = 0; i < loops.length; i++) {
+            const o = loops[i];
+            if (i === current || o.take !== l.take) continue;
+            if (x >= xOf(o.start) - tol && x <= xOf(o.end) + tol)
+              return { select: i };
+          }
+        return null;
+      }
+
+      cv.addEventListener("pointerdown", (e) => {
+        const l = sel();
+        if (!l) return;
+        const hit = hitTest(e);
+        if (!hit) return;
+        if (hit.select != null) {
+          select(hit.select);
+          return;
+        }
+        // The tempo the drag began with. A plain drag holds it: edges walk
+        // in whole beats and `beats` follows, so stretching a region never
+        // bends its tempo. Shift-drag frees the edge — that is the gesture
+        // that SETS the tempo, nudging a boundary onto a transient.
+        dragging = { grab: hit.grab, per0: period(l) };
+        try {
+          cv.setPointerCapture(e.pointerId);
+        } catch (_) {}
+        e.preventDefault();
+      });
+      cv.addEventListener("pointermove", (e) => {
+        const l = sel();
+        if (!l) {
+          return;
+        }
+        if (!dragging) {
+          const hit = hitTest(e);
+          cv.style.cursor = hit
+            ? hit.select != null
+              ? "pointer"
+              : "ew-resize"
+            : "crosshair";
+          return;
+        }
+        const t = takeOf(l);
+        const f = frameAt(e, cv);
+        // The grid is a magnet, not a cage: the handle goes exactly where
+        // the pointer goes, and only clicks onto a beat line when it is
+        // within a few pixels of one — so a huge period on a long take can
+        // never pin a handle in place. On a line, `beats` follows and the
+        // tempo holds; off it, the edge is free and the tempo follows.
+        // Shift ignores the grid entirely.
+        const magnet = !e.shiftKey;
+        const per0 = dragging.per0;
+        const ppf = cv.getBoundingClientRect().width / view.span;
+        const near = (a, b) => Math.abs(a - b) * ppf <= SNAP_PX;
+        if (dragging.grab === "start") {
+          let start = Math.max(0, Math.min(l.end - MIN_LOOP, f));
+          if (magnet) {
+            const n = Math.max(1, Math.round((l.end - start) / per0));
+            const g = l.end - Math.round(n * per0);
+            if (near(g, start) && g >= 0) {
+              start = Math.min(l.end - MIN_LOOP, g);
+              l.beats = n;
+              $("fBeats").value = n;
+            }
+          }
+          l.start = start;
+          if (l.downbeat != null && l.downbeat < l.start) l.downbeat = null;
+        } else if (dragging.grab === "end") {
+          let end = Math.min(t.frames, Math.max(l.start + MIN_LOOP, f));
+          if (magnet) {
+            const n = Math.max(1, Math.round((end - l.start) / per0));
+            const g = l.start + Math.round(n * per0);
+            if (near(g, end) && g <= t.frames) {
+              end = Math.max(l.start + MIN_LOOP, g);
+              l.beats = n;
+              $("fBeats").value = n;
+            }
+          }
+          l.end = end;
+          if (l.downbeat != null && l.downbeat >= l.end) l.downbeat = null;
+        } else if (dragging.grab === "downbeat") {
+          let clamped = Math.max(l.start, Math.min(l.end - 1, f));
+          if (magnet) {
+            // downbeats live on beats, so nearby lines attract it
+            const k = Math.round((clamped - l.start) / per0);
+            const g = l.start + Math.round(k * per0);
+            if (near(g, clamped))
+              clamped = Math.max(l.start, Math.min(l.end - 1, g));
+          }
+          // Back on the start, it is the start again.
+          l.downbeat = Math.abs(clamped - l.start) <= 2 ? null : clamped;
+        }
+        redraw();
+      });
+      const endDrag = () => {
+        if (!dragging) return;
+        dragging = null;
+        renderLoops();
+      };
+      cv.addEventListener("pointerup", endDrag);
+      cv.addEventListener("pointercancel", endDrag);
+
+      cv.addEventListener(
+        "wheel",
+        (e) => {
+          if (!sel()) return;
+          e.preventDefault();
+          zoomBy(e.deltaY > 0 ? 1.25 : 0.8, frameAt(e, cv));
+        },
+        { passive: false }
+      );
+
+      // The overview strip moves the window: click to center it, drag to scrub.
+      let miniDrag = false;
+      const miniSeek = (e) => {
+        const l = sel();
+        if (!l) return;
+        const t = takeOf(l);
+        const r = mini.getBoundingClientRect();
+        const x = Math.min(Math.max(0, e.clientX - r.left), r.width);
+        view.offset = (x / r.width) * t.frames - view.span / 2;
+        clampView();
+        redraw();
+      };
+      mini.addEventListener("pointerdown", (e) => {
+        miniDrag = true;
+        // Capture keeps a drag alive past the edge of the strip. It throws on
+        // a pointer id the element never saw, and losing the seek to that
+        // would be worse than losing the capture.
+        try {
+          mini.setPointerCapture(e.pointerId);
+        } catch (_) {}
+        miniSeek(e);
+      });
+      mini.addEventListener("pointermove", (e) => miniDrag && miniSeek(e));
+      mini.addEventListener("pointerup", () => (miniDrag = false));
+
+      $("bFitAll").addEventListener("click", () => {
+        fitAll();
+        redraw();
+      });
+      $("bFitLoop").addEventListener("click", () => {
+        fitLoop();
+        redraw();
+      });
+
+      // ── preview ─────────────────────────────────────────────────────
+      // The loop exactly as it will be encoded: started at the downbeat,
+      // looping the whole region. If the seam ticks, the numbers are wrong
+      // and this is where you hear it.
+      let preview = null;
+      $("bPreview").addEventListener("click", async () => {
+        if (preview) return stopPreview();
+        const l = sel();
+        if (!l) return;
+        const t = takeOf(l);
+        const cut = sliceChannels(
+          fitChannels(t.channels, channelsFor(t.channels)),
+          l.start,
+          l.end
+        );
+        const ctx = new AudioContext({ sampleRate: t.sampleRate });
+        const buf = ctx.createBuffer(cut.length, cut[0].length, t.sampleRate);
+        for (let c = 0; c < cut.length; c++) buf.copyToChannel(cut[c], c);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.loopStart = 0;
+        src.loopEnd = buf.duration;
+        src.connect(ctx.destination);
+        const rel = originOf(l);
+        const at = ctx.currentTime + 0.1;
+        src.start(at, rel / t.sampleRate);
+        preview = {
+          ctx,
+          src,
+          raf: null,
+          startedAt: at,
+          originFrames: rel,
+          loopFrames: buf.length,
+          sampleRate: t.sampleRate,
+          startFrame: l.start,
+          frames: t.frames,
+        };
+        $("bPreview").textContent = "■ stop";
+        followPlayhead();
+      });
+      /**
+       * Where the preview is, as a frame index into the take.
+       *
+       * Read off the audio clock rather than counted, so it cannot drift from
+       * what is sounding. The source starts at the downbeat and loops the
+       * whole region, so the position wraps the same way.
+       */
+      function previewFrame() {
+        if (!preview) return null;
+        const elapsed = preview.ctx.currentTime - preview.startedAt;
+        if (elapsed < 0) return null;
+        const n = preview.loopFrames;
+        const into =
+          (((preview.originFrames + elapsed * preview.sampleRate) % n) + n) % n;
+        return preview.startFrame + into;
+      }
+
+      function followPlayhead() {
+        const head = $("playhead");
+        const miniHead = $("playheadMini");
+        const f = previewFrame();
+        if (f == null || !sel()) {
+          head.hidden = true;
+          miniHead.hidden = true;
+        } else {
+          // Keep the head on screen when zoomed past the loop, panning by whole
+          // views so the waveform does not slide under the pointer.
+          if (f < view.offset || f > view.offset + view.span) {
+            view.offset = f - view.span / 2;
+            clampView();
+            redraw();
+          }
+          const w = cv.getBoundingClientRect().width;
+          const x = ((f - view.offset) / view.span) * w;
+          head.hidden = x < 0 || x > w;
+          head.style.transform = "translateX(" + x + "px)";
+          const mw = mini.getBoundingClientRect().width;
+          miniHead.hidden = false;
+          miniHead.style.transform =
+            "translateX(" + (f / preview.frames) * mw + "px)";
+        }
+        if (preview) preview.raf = requestAnimationFrame(followPlayhead);
+      }
+
+      function stopPreview() {
+        if (!preview) return;
+        if (preview.raf) cancelAnimationFrame(preview.raf);
+        $("playhead").hidden = true;
+        $("playheadMini").hidden = true;
+        try {
+          preview.src.stop();
+        } catch (_) {}
+        preview.ctx.close();
+        preview = null;
+        $("bPreview").textContent = "▶ loop it";
+      }
+
+      // ── encode ──────────────────────────────────────────────────────
+      function status(text, state) {
+        $("makeStatus").textContent = text;
+        if (state) $("makeStatus").dataset.state = state;
+        else delete $("makeStatus").dataset.state;
+      }
+      function note(line) {
+        $("makeNotes").textContent += line + "\n";
+      }
+
+      function offer(r) {
+        $("makeOut").innerHTML =
+          `<div class="ht-arrange-row"><a href="${URL.createObjectURL(
+            r.blob
+          )}" download="${r.name}">↓ ${r.name}</a>` +
+          `<span class="u-faint ht-type-small">${r.width}×${r.height} · ${
+            r.loops.length
+          } loop${r.loops.length === 1 ? "" : "s"}</span></div>` +
+          r.loops
+            .map(
+              (l) =>
+                `<div class="u-faint ht-type-small">${
+                  l.title || "loop"
+                } · ${fmtBpm(l.bpm)} bpm · ${l.beats} beats · ${keyLabel(
+                  l
+                )} · downbeat ${l.origin}</div>`
+            )
+            .join("");
+      }
+
+      $("bEncode").addEventListener("click", async () => {
+        if (!loops.length) return;
+        status("encoding", "busy");
+        try {
+          const file = carrierFile();
+          const result = await encodePack({
+            takes: loops.map((l) => ({
+              channels: takeOf(l).channels,
+              sampleRate: takeOf(l).sampleRate,
+              start: l.start,
+              end: l.end,
+              origin: originOf(l),
+              beats: l.beats,
+              meter: l.meter,
+              title: l.title,
+              artist: $("fArtist").value || "",
+              root: l.root,
+              mode: l.mode,
+              sourceName: takeOf(l).file.name,
+            })),
+            carrierFile: file,
+            packTitle:
+              $("fPack").value || (file ? titleFromName(file.name) : ""),
+          });
+          offer(result);
+          status("done", "done");
+        } catch (err) {
+          status(err.message, "error");
+        }
+      });
+
+      wireDrop($("makeDrop"), $("makeFiles"), takeMakeFiles);
+    </script>
+  </body>
+</html>

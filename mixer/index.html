@@ -1,0 +1,1712 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stegassette: mixer</title>
+    <link rel="stylesheet" href="../ui.css" />
+    <style>
+      /* Screen-specific layout on top of amplib-ui. Type, controls,
+         fieldsets, the drop target and the list rows all come from the
+         system; what is left here is this screen's arrangement and the one
+         thing that exists only here — the deck rows. */
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        padding: var(--ht-space-6);
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ht-flow);
+        width: 100%;
+      }
+      fieldset {
+        margin: 0;
+        width: 100%;
+      }
+      /* panels separate as much as the groups inside them: the flow gap
+         plus this margin lands on the same space the deck boxes keep */
+      section > fieldset + fieldset {
+        margin-block-start: calc(var(--ht-space-6) - var(--ht-flow));
+      }
+      /* the title links home; the hover polarity is the affordance, so it
+         does not need a rule under it too */
+      h1 a {
+        text-decoration: none;
+      }
+
+      /* ── beat strips ──────────────────────────────────────────────────
+         Cells, not a canvas. A canvas has an intrinsic size and a CSS size,
+         and the two were 1600x120 against 494x60 — stretched 0.31 across and
+         0.50 down, so nothing in it was the shape it was drawn as. A grid of
+         elements is crisp at any width and can be restyled without touching
+         the code that fills it. */
+      .beats {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        gap: 1px;
+        width: 100%;
+        height: 0.75rem;
+      }
+      .beats i {
+        background: var(--ht-ink);
+        opacity: 0.16;
+      }
+      .beats i[data-accent] {
+        opacity: 0.34;
+      }
+      .beats i[data-on] {
+        opacity: 1;
+      }
+      /* one strip per track, half the main bar's height, close together
+         and set slightly off the main bar — one rhythm, two registers */
+      .trackstrips {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 100%;
+        margin-block-start: var(--ht-space-3);
+      }
+      .beats--track {
+        height: 0.375rem;
+      }
+      /* the transport: label, control, label, control — wrapping into one
+         readable band instead of a row that breaks wherever it runs out */
+      .mixgrid {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ht-space-2) var(--ht-space-4);
+        width: 100%;
+      }
+      .mixgrid > label {
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+        opacity: 0.5;
+      }
+      .mixgrid > input[type="number"] {
+        width: 5rem;
+      }
+      .mixgrid > input[type="range"] {
+        width: 8rem;
+      }
+
+      .decks2 {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: var(--ht-space-6) var(--ht-space-4);
+        align-items: start;
+        width: 100%;
+        margin-block-start: var(--ht-space-6);
+      }
+      .channel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-3);
+        min-width: 0;
+        border: var(--ht-hairline) solid var(--ht-line);
+        padding: var(--ht-space-3);
+      }
+      .channel__head {
+        display: flex;
+        align-items: center;
+        gap: var(--ht-space-3);
+        min-width: 0;
+      }
+      /* the channel's own tone, at its head where the hand finds it */
+      .channel__knobs {
+        margin-inline-start: auto;
+      }
+      .channel__empty {
+        opacity: 0.5;
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+        padding-block: var(--ht-space-4);
+      }
+      .fader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--ht-space-2);
+        padding-block-start: var(--ht-space-5);
+      }
+      .fader input[type="range"] {
+        width: 9rem;
+      }
+      @media (max-width: 60rem) {
+        .decks2 {
+          grid-template-columns: 1fr;
+        }
+        .fader {
+          flex-direction: row;
+          padding-block-start: 0;
+        }
+      }
+
+      /* ── a deck card ──────────────────────────────────────────────────
+         Four groups with one space between them, and nothing that moves
+         when a setting changes: what it is, beside its level strip and its
+         housekeeping; how it plays; the knobs that shape it; the one
+         button that turns the mix around it. Variable pieces sit at the
+         tail of their group, so a state change never shifts a control. */
+      .deckcard {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-4);
+        padding-block: var(--ht-space-3);
+        border-block-start: var(--ht-hairline) solid var(--ht-line);
+      }
+      /* the decks of a channel, as their pictures: tap one to open its
+         card, tap it again to fold the channel down to thumbnails */
+      .deckgrid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-2);
+      }
+      .deckgrid img {
+        width: 2.5rem;
+        height: 2.5rem;
+        object-fit: cover;
+        image-rendering: pixelated;
+        border: var(--ht-hairline) solid var(--ht-line);
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .deckgrid img[data-open] {
+        border-color: var(--ht-ink);
+        outline: 2px solid var(--ht-ink);
+        outline-offset: 2px;
+        opacity: 1;
+      }
+      .deckgrid img[data-muted] {
+        opacity: 0.4;
+      }
+      .deckthumb {
+        position: relative;
+      }
+      .deckthumb img {
+        display: block;
+      }
+      /* the loop's position, swept over its own artwork — a deck reads as
+         playing from the thumbnails alone, no card open */
+      .deckthumb__wipe {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: conic-gradient(
+          color-mix(in srgb, var(--ht-paper) 45%, transparent)
+            calc(var(--deg, 0) * 1deg),
+          transparent 0
+        );
+      }
+      .deckcard__top {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: var(--ht-space-3);
+        align-items: start;
+      }
+      .deckcard__id {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--ht-space-2);
+      }
+      .deckcard__title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* A range turned on its side, not a different widget. `slider-vertical`
+         is the other way to do this and it opts the element out of the theme's
+         appearance:none, which is why this one came back as the only piece of
+         colour on the page. writing-mode leaves it an ordinary range, so the
+         system's track and thumb rules still reach it. */
+      .vfader {
+        writing-mode: vertical-lr;
+        direction: rtl;
+        /* Logical, not physical: turned on its side, inline-size is the
+           visual height. ui.css sets it to 100% for a horizontal range, which
+           here made the fader as tall as the row it sat in and forced the
+           card open. */
+        inline-size: 3rem;
+        block-size: var(--ht-control-size-sm);
+        cursor: row-resize;
+        padding: 0;
+      }
+      /* the level and its mute, stacked where a hand looks for them */
+      .deckcard__vol {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--ht-space-2);
+      }
+      .deckcard__vol button {
+        min-width: 0;
+        padding-inline: var(--ht-space-2);
+      }
+      /* pan, level, mute: where the deck sits and how loud — a console
+         strip, apart from the knobs that shape its tone */
+      .deckcard__strip {
+        display: flex;
+        align-items: center;
+        gap: var(--ht-space-3);
+      }
+      /* the deck's own housekeeping, stacked under the channel's clear */
+      .deckcard__ops {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--ht-space-2);
+      }
+      /* a knob kept as a meter: tape's pitch is its rate, and the needle
+         sits where the rate put it */
+      .knobrow[data-idle] {
+        opacity: 0.35;
+      }
+      .knobrow[data-idle] .knob {
+        pointer-events: none;
+        cursor: default;
+      }
+      /* ── knobs ────────────────────────────────────────────────────────
+         One rotary each for filter, res and pan: three sliders' worth of
+         card in a single row. Drag up or down to turn, double-click to
+         reset; the title carries the value. */
+      .knobs {
+        display: flex;
+        gap: var(--ht-space-4);
+        align-items: flex-start;
+      }
+      .knobrow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+      .knobrow > span {
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+        opacity: 0.5;
+      }
+      .knob {
+        width: 2.2rem;
+        height: 2.2rem;
+        border-radius: 50%;
+        border: var(--ht-hairline) solid var(--ht-line);
+        background: color-mix(in srgb, var(--ht-ink) 6%, transparent);
+        position: relative;
+        cursor: ns-resize;
+        touch-action: none;
+      }
+      .knob i {
+        position: absolute;
+        inset: 0;
+        transform: rotate(0deg);
+      }
+      .knob i::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 3px;
+        width: 2px;
+        height: 38%;
+        margin-left: -1px;
+        background: var(--ht-ink);
+        opacity: 0.65;
+      }
+      /* a group of controls per row, no labels: the options say what a
+         select is, the tooltip says the rest */
+      .deckcard__row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ht-space-2) var(--ht-space-5);
+      }
+      .deckcard__cell {
+        display: flex;
+        align-items: center;
+        gap: var(--ht-space-2);
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .deckcard__cell input[type="range"] {
+        flex: 1 1 4rem;
+        min-width: 3rem;
+      }
+      /* A beat count is two digits. Left to grow they take the whole row and
+         push what they mean onto the next line. */
+      .deckcard__cell input[type="number"] {
+        flex: 0 0 3.5rem;
+        inline-size: 3.5rem;
+      }
+      /* A deck running far from ×1 is the one to look at when something
+         sounds wrong, so the rate inverts rather than just being printed. */
+      [data-stretched] {
+        background: var(--ht-ink);
+        color: var(--ht-paper);
+        padding-inline: var(--ht-space-1);
+      }
+      .num {
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+      }
+      .num span {
+        opacity: 0.5;
+      }
+
+      /* ── the library ──────────────────────────────────────────────────
+         The images themselves, in a grid — a stegassette's artwork is its
+         name. Tap one to open the loops it carries; a picture with a loop
+         on a deck keeps an ink edge. */
+      .libgrid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ht-space-2);
+      }
+      .libgrid img {
+        width: 2.5rem;
+        height: 2.5rem;
+        object-fit: cover;
+        image-rendering: pixelated;
+        border: var(--ht-hairline) solid var(--ht-line);
+        cursor: pointer;
+      }
+      .libgrid img[data-live] {
+        border-color: var(--ht-ink);
+      }
+      .libgrid img[data-open] {
+        border-color: var(--ht-ink);
+        outline: 2px solid var(--ht-ink);
+        outline-offset: 2px;
+      }
+      /* the open crate: its artwork at full size, its loops beside it,
+         set down from the grid so the open thumb's ring has room */
+      .libdetail {
+        display: flex;
+        gap: var(--ht-space-4);
+        align-items: flex-start;
+        width: 100%;
+        margin-block-start: var(--ht-space-5);
+      }
+      .libdetail > img {
+        width: 13rem;
+        height: 13rem;
+        object-fit: cover;
+        image-rendering: pixelated;
+        border: var(--ht-hairline) solid var(--ht-line);
+      }
+      .libdetail__rows {
+        flex: 1;
+        min-width: 0;
+      }
+      .deck {
+        display: grid;
+        grid-template-columns:
+          minmax(7rem, 1fr) repeat(2, minmax(6rem, auto))
+          minmax(8rem, auto) minmax(7rem, auto) auto;
+        align-items: center;
+        gap: var(--ht-space-3);
+        padding: var(--ht-space-3);
+        border-block-end: var(--ht-hairline) solid var(--ht-line);
+      }
+      .deck:last-child {
+        border-block-end: 0;
+      }
+      .deck__name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .deck__num {
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+      }
+      .deck__num span {
+        opacity: 0.5;
+      }
+      .deck__controls {
+        display: flex;
+        align-items: center;
+        gap: var(--ht-space-2);
+      }
+      @media (max-width: 60rem) {
+        .deck {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .notes {
+        font-family: var(--ht-font-mono);
+        font-size: var(--ht-text-small);
+        opacity: 0.6;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body data-theme="auto" data-density="compact">
+    <h1><a href="/">stegassette</a>: mixer</h1>
+
+    <section id="mixer">
+      <div class="drop" id="mixDrop" data-state="empty" tabindex="0">
+        <div class="drop__label">drop loop stegassettes</div>
+        <div class="drop__sub">any number, from anywhere</div>
+      </div>
+      <input id="mixFiles" type="file" multiple accept="image/png" hidden />
+
+      <!-- Hidden until media/index.json lists something, so an empty media/
+           shows no button. -->
+      <div class="ht-arrange-row" id="demoRow" hidden>
+        <button id="bDemo">try the demo set</button>
+      </div>
+
+      <fieldset id="mixControls" hidden>
+        <legend>the mix</legend>
+        <div class="mixgrid">
+          <button id="bPlay">▶ play</button>
+          <button
+            id="bSync"
+            title="put every free deck's beat 1 back on the next grid boundary, without a gap"
+          >
+            sync
+          </button>
+          <button
+            id="bCapture"
+            title="record one full cycle of the mix into a new loop stegassette, its picture composed of the playing decks' artwork"
+          >
+            capture ↓
+          </button>
+          <label for="mBpm">bpm</label>
+          <input id="mBpm" type="number" step="0.5" min="20" max="400" value="120" />
+          <label for="mGrid">grid</label>
+          <input id="mGrid" type="number" min="1" max="64" step="1" value="4" />
+          <label for="mRoot">key</label>
+          <div class="deckcard__cell">
+            <select id="mRoot"></select>
+            <select id="mMode"></select>
+            <select id="mMatch">
+              <option value="scale" selected>scale</option>
+              <option value="tonic">tonic</option>
+            </select>
+          </div>
+          <label for="mMaster">master</label>
+          <div class="deckcard__cell">
+            <input id="mMaster" type="range" min="0" max="1.5" step="0.01" value="0.8" />
+            <button id="bHelp" aria-expanded="false" aria-controls="mixHelp">?</button>
+          </div>
+        </div>
+        <div class="out" id="mixOut"></div>
+        <p class="field__hint" id="mixHelp" hidden>
+          <b>grid</b> is the global cycle in beats — every loop starts and
+          relaunches on a multiple of it. 1 is immediate, 16 is phrase-aligned.
+          Bars are not involved; a loop can be any number of beats long.
+          <br />
+          <b>scale</b> matches the seven notes, so F minor sits in an A♭ major
+          mix untouched. <b>tonic</b> matches the declared roots instead, which
+          is what a bassline wants.
+        </p>
+      </fieldset>
+
+      <fieldset id="deckPanel" hidden>
+        <legend>decks</legend>
+        <div class="beats" id="gridStrip"></div>
+        <div class="trackstrips" id="trackStrips"></div>
+        <div class="decks2">
+          <div class="channel" data-ch="a"></div>
+          <div class="fader">
+            <div class="ht-type-eyebrow">A</div>
+            <input
+              id="mCross"
+              type="range"
+              min="0"
+              max="1"
+              step="0.001"
+              value="0.5"
+              aria-label="crossfade"
+            />
+            <div class="ht-type-eyebrow">B</div>
+            <button id="bCut">cut</button>
+          </div>
+          <div class="channel" data-ch="b"></div>
+        </div>
+      </fieldset>
+
+      <fieldset id="libPanel" hidden>
+        <legend>crate</legend>
+        <div id="deckList"></div>
+      </fieldset>
+
+      <div class="notes" id="mixNotes"></div>
+    </section>
+
+    <script src="../lib/stegassette.js"></script>
+    <script src="../lib/sound-transformation.js"></script>
+    <script type="module">
+      import {
+        NOTES,
+        MODE_NAMES,
+        fmtBpm,
+        keyLabel,
+        buildLoop,
+        loopEntry,
+        loopFileName,
+        slug,
+      } from "../loop/format.js";
+      import { imgToPngBlob, normalizeTo } from "../loop/encode.js";
+      import { read, Engine } from "./engine.js";
+
+      const $ = (id) => document.getElementById(id);
+      const WORKLET = "../lib/phase-vocoder-processor.js";
+
+      // A dropped folder arrives as directory entries, so walk them to get the
+      // files inside — same result as the file picker.
+      async function filesFromDrop(dt) {
+        const out = [];
+        const entries = [...(dt.items || [])]
+          .map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null))
+          .filter(Boolean);
+        if (!entries.length) return [...(dt.files || [])];
+        async function walk(entry) {
+          if (entry.isFile) {
+            out.push(await new Promise((res, rej) => entry.file(res, rej)));
+          } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            for (;;) {
+              const batch = await new Promise((res, rej) =>
+                reader.readEntries(res, rej)
+              );
+              if (!batch.length) break;
+              for (const e of batch) await walk(e);
+            }
+          }
+        }
+        for (const e of entries) await walk(e);
+        return out;
+      }
+      function wireDrop(el, input, onFiles) {
+        for (const t of ["dragenter", "dragover"])
+          el.addEventListener(t, (e) => {
+            e.preventDefault();
+            el.dataset.state = "over";
+          });
+        for (const t of ["dragleave", "drop"])
+          el.addEventListener(t, (e) => {
+            e.preventDefault();
+            delete el.dataset.state;
+          });
+        el.addEventListener("drop", async (e) => {
+          e.preventDefault();
+          onFiles(await filesFromDrop(e.dataTransfer));
+        });
+        el.addEventListener("click", () => input.click());
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") input.click();
+        });
+        input.addEventListener("change", () => onFiles([...input.files]));
+      }
+
+      // The twelve names and the modes come from the format, so a menu can
+      // never offer something matchSemitones does not understand.
+      function fillNotes(sel, value) {
+        sel.innerHTML = NOTES.map(
+          (n) => `<option${n === value ? " selected" : ""}>${n}</option>`
+        ).join("");
+      }
+      function fillModes(sel, value) {
+        sel.innerHTML = MODE_NAMES.map(
+          (n) => `<option${n === value ? " selected" : ""}>${n}</option>`
+        ).join("");
+      }
+      fillNotes($("mRoot"), "C");
+      fillModes($("mMode"), "major");
+
+      let engine = null;
+      const library = [];
+      // Which crate is open, by object URL.
+      let libOpen = null;
+      // Which deck's card is open per channel: undefined means the last
+      // one added, null means the channel is folded to thumbnails.
+      const openCardByCh = { a: undefined, b: undefined };
+
+      async function takeMixFiles(files) {
+        $("mixNotes").textContent = "";
+        const { loops, skipped } = await read(files, (msg) => {
+          $("mixNotes").textContent = msg;
+        });
+        if (skipped.length) $("mixNotes").textContent = skipped.join("\n");
+        else $("mixNotes").textContent = "";
+        if (!loops.length) return;
+
+        if (!engine) {
+          // The context takes the first loop's rate, so a set cut at one
+          // rate never touches a resampler. Later loops at other rates
+          // still play; they are resampled by their source node.
+          engine = new Engine({
+            workletURL: WORKLET,
+            sampleRate: loops[0].sampleRate,
+          });
+          engine.setMasterGain(parseFloat($("mMaster").value));
+          // The first loop sets the mix, which is almost always what you
+          // meant — it is the one you chose first. For a pack, that is the
+          // first loop its author put in it.
+          engine.bpm = Math.round(loops[0].loop.bpm * 100) / 100;
+          engine.key = { root: loops[0].loop.root, mode: loops[0].loop.mode };
+          engine.meter = loops[0].loop.meter || 4;
+          $("mBpm").value = fmtBpm(engine.bpm);
+          $("mRoot").value = engine.key.root;
+          $("mMode").value = engine.key.mode;
+          $("mGrid").value = engine.grid;
+          $("mixControls").hidden = false;
+          $("deckPanel").hidden = false;
+        }
+
+        // One object URL per file, shared by every loop of a pack — the
+        // pack's artwork is the artwork of each of its loops.
+        const urls = new Map();
+        for (const item of loops) {
+          if (!urls.has(item.blob))
+            urls.set(item.blob, URL.createObjectURL(item.blob));
+          library.push({ item, url: urls.get(item.blob) });
+        }
+        // Fill the empty decks as loops arrive, so dropping two files gives a
+        // playable A and B with nothing to click.
+        for (const id of ["a", "b"]) {
+          if (engine.channels[id].decks.length) continue;
+          const next = library.find(
+            (l) => !engine.decks.some((d) => d.item === l.item)
+          );
+          if (next) await engine.add(id, next.item);
+        }
+        $("mixDrop").dataset.state = "ready";
+        $("libPanel").hidden = false;
+        renderDecks();
+      }
+
+      const factorLabel = (f) =>
+        f === 1 ? "" : f < 1 ? "÷" + Math.round(1 / f) : "×" + Math.round(f);
+
+      function renderDecks() {
+        renderLibrary();
+        renderChannels();
+      }
+
+      // ── the library ─────────────────────────────────────────────────
+      // The images, in a grid: a stegassette's artwork is its name, and a
+      // pack is one picture whatever it carries. Tap a picture and its
+      // loops open underneath, each one a row with the way onto a deck.
+      function renderLibrary() {
+        const groups = [];
+        const byUrl = new Map();
+        library.forEach((entry, i) => {
+          let g = byUrl.get(entry.url);
+          if (!g) {
+            g = { url: entry.url, file: entry.item.file, indices: [] };
+            byUrl.set(entry.url, g);
+            groups.push(g);
+          }
+          g.indices.push(i);
+        });
+        if (libOpen != null && !byUrl.has(libOpen)) libOpen = null;
+        // One picture needs no tap to say which one you meant.
+        if (libOpen == null && groups.length === 1) libOpen = groups[0].url;
+
+        const countOn = (id, item) =>
+          engine
+            ? engine.channels[id].decks.filter((d) => d.item === item).length
+            : 0;
+        const onDecks = (item) => countOn("a", item) + countOn("b", item) > 0;
+
+        const open = groups.find((g) => g.url === libOpen);
+        $("deckList").innerHTML =
+          `<div class="libgrid">` +
+          groups
+            .map(
+              (g) =>
+                `<img src="${g.url}" alt="${g.file}" title="${g.file}" data-g="${g.url}"${
+                  g.url === libOpen ? ' data-open="true"' : ""
+                }${
+                  g.indices.some((i) => onDecks(library[i].item))
+                    ? ' data-live="true"'
+                    : ""
+                } />`
+            )
+            .join("") +
+          `</div>` +
+          (open
+            ? `<div class="libdetail">` +
+              `<img src="${open.url}" alt="${open.file}" />` +
+              `<div class="libdetail__rows">` +
+              open.indices
+                .map((i) => {
+                  const { item } = library[i];
+                  const a = countOn("a", item);
+                  const b = countOn("b", item);
+                  const live = [
+                    a ? "A" + (a > 1 ? "×" + a : "") : "",
+                    b ? "B" + (b > 1 ? "×" + b : "") : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    `<div class="deck" data-i="${i}"${live ? ' data-selected="true"' : ""}>` +
+                    `<div class="deck__name">${item.loop.title || item.file}` +
+                    `<div class="u-faint ht-type-small">${fmtBpm(
+                      item.loop.bpm
+                    )} bpm · ${item.loop.beats} beats · ${keyLabel(
+                      item.loop
+                    )}</div></div>` +
+                    `<div class="deck__num">${
+                      live ? "<span>on deck </span>" + live : ""
+                    }</div>` +
+                    `<div class="deck__controls">` +
+                    `<button data-role="toA">→ A</button>` +
+                    `<button data-role="toB">→ B</button>` +
+                    `<button data-role="remove">✕</button>` +
+                    `</div></div>`
+                  );
+                })
+                .join("") +
+              `</div></div>`
+            : "");
+
+        for (const img of $("deckList").querySelectorAll(".libgrid img"))
+          img.addEventListener("click", () => {
+            libOpen = img.dataset.g === libOpen ? null : img.dataset.g;
+            renderLibrary();
+          });
+        for (const row of $("deckList").querySelectorAll(".deck[data-i]")) {
+          const i = +row.dataset.i;
+          const entry = library[i];
+          for (const [role, ch] of [
+            ["toA", "a"],
+            ["toB", "b"],
+          ])
+            row
+              .querySelector(`[data-role="${role}"]`)
+              .addEventListener("click", async () => {
+                await engine.add(ch, entry.item);
+                renderDecks();
+              });
+          row
+            .querySelector('[data-role="remove"]')
+            .addEventListener("click", () => {
+              for (const d of engine.decks.filter((d) => d.item === entry.item))
+                engine.remove(d);
+              // The URL is shared across a pack, so it is only released when
+              // the last loop pointing at it leaves.
+              library.splice(i, 1);
+              if (!library.some((l) => l.url === entry.url))
+                URL.revokeObjectURL(entry.url);
+              renderDecks();
+            });
+        }
+      }
+
+      // ── the two channels ────────────────────────────────────────────
+      // Each holds a stack. A loop can sit on both channels, or twice on one:
+      // every deck is its own source with its own tempo, pitch and range.
+      function renderChannels() {
+        for (const id of ["a", "b"]) {
+          const host = document.querySelector(`.channel[data-ch="${id}"]`);
+          const decks = engine ? engine.channels[id].decks : [];
+          host.toggleAttribute("data-live", decks.length > 0);
+          // The open card: the one tapped, the newest by default, none
+          // when the channel was folded.
+          let openDeck = openCardByCh[id];
+          if (openDeck !== null && (!openDeck || !decks.includes(openDeck)))
+            openDeck = decks[decks.length - 1] || null;
+          const openIdx = openDeck ? decks.indexOf(openDeck) : -1;
+          host.innerHTML =
+            `<div class="channel__head">` +
+            `<div class="ht-type-eyebrow">deck ${id.toUpperCase()}${
+              decks.length ? " · " + decks.length : ""
+            }</div>` +
+            `<div class="knobs channel__knobs">` +
+            [
+              ["chFilter", "filter"],
+              ["chRes", "res"],
+            ]
+              .map(
+                ([role, label]) =>
+                  `<div class="knobrow"><div class="knob" data-role="${role}"><i></i></div>` +
+                  `<span>${label}</span></div>`
+              )
+              .join("") +
+            `</div>` +
+            (decks.length
+              ? `<button data-role="clear">clear</button>`
+              : "") +
+            `</div>` +
+            (decks.length
+              ? `<div class="deckgrid">` +
+                decks
+                  .map((deck, di) => {
+                    const entry = library.find((l) => l.item === deck.item);
+                    return (
+                      `<div class="deckthumb" data-dg="${di}">` +
+                      `<img src="${entry ? entry.url : ""}" alt="${
+                        deck.loop.title || deck.item.file
+                      }" title="${deck.loop.title || deck.item.file}"${
+                        di === openIdx ? ' data-open="true"' : ""
+                      }${deck.muted ? ' data-muted="true"' : ""} />` +
+                      `<i class="deckthumb__wipe"></i>` +
+                      `</div>`
+                    );
+                  })
+                  .join("") +
+                `</div>` +
+                (openDeck ? deckCard(openDeck, openIdx) : "")
+              : `<div class="channel__empty">empty</div>`);
+
+          if (decks.length)
+            host
+              .querySelector('[data-role="clear"]')
+              .addEventListener("click", () => {
+                engine.clearChannel(id);
+                renderDecks();
+              });
+
+          wireKnob(host.querySelector('[data-role="chFilter"]'), {
+            min: -1,
+            max: 1,
+            value: engine ? engine.channels[id].filterAt : 0,
+            def: 0,
+            apply: (v) => {
+              if (!engine) return "";
+              engine.setFilter(id, v);
+              return "filter " + engine.filterLabel(id);
+            },
+          });
+          wireKnob(host.querySelector('[data-role="chRes"]'), {
+            min: 0.5,
+            max: 14,
+            value: engine ? engine.channels[id].resonance : 1,
+            def: 1,
+            apply: (v) => {
+              if (!engine) return "";
+              engine.setResonance(id, v);
+              return "res " + v.toFixed(1);
+            },
+          });
+          for (const thumb of host.querySelectorAll(".deckthumb"))
+            thumb.addEventListener("click", () => {
+              const di = +thumb.dataset.dg;
+              openCardByCh[id] = di === openIdx ? null : decks[di];
+              renderChannels();
+            });
+          if (openDeck) wireDeckCard(host, openDeck, openIdx);
+        }
+        // The track strips, under the main bar: one per deck across both
+        // channels, at full width.
+        $("trackStrips").innerHTML = ["a", "b"]
+          .flatMap((id) =>
+            (engine ? engine.channels[id].decks : []).map(
+              (d, di) =>
+                `<div class="beats beats--track" data-ch="${id}" data-di="${di}"></div>`
+            )
+          )
+          .join("");
+      }
+
+      /**
+       * The total shift, one token. The split — how much is yours and how
+       * much the key match contributed — rides in the tooltip, because
+       * those are two different reasons to be off the root and only one
+       * of them is yours.
+       */
+      const st = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
+      function pitchLabel(deck) {
+        return st(deck.semitones) + " st" + (deck.inTune ? " ✓" : "");
+      }
+      function pitchTitle(deck) {
+        return st(deck.pitchOffset) + " yours · " + st(deck.matchSemitones) + " key";
+      }
+
+      /**
+       * A knob: drag up or down to turn, double-click to reset. `apply`
+       * writes the value through and returns the title text, so the
+       * knob's tooltip always says what it is set to.
+       */
+      function wireKnob(el, { min, max, value, def, apply }) {
+        const ind = el.querySelector("i");
+        let v = value;
+        const draw = () => {
+          const t = Math.max(0, Math.min(1, (v - min) / (max - min)));
+          ind.style.transform = "rotate(" + (-135 + 270 * t) + "deg)";
+        };
+        el.title = apply(v) || "";
+        draw();
+        let fromY = null;
+        let fromV = 0;
+        el.addEventListener("pointerdown", (e) => {
+          fromY = e.clientY;
+          fromV = v;
+          try {
+            el.setPointerCapture(e.pointerId);
+          } catch (_) {}
+          e.preventDefault();
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (fromY == null) return;
+          v = Math.max(
+            min,
+            Math.min(max, fromV + ((fromY - e.clientY) * (max - min)) / 150)
+          );
+          el.title = apply(v) || "";
+          draw();
+        });
+        const done = () => (fromY = null);
+        el.addEventListener("pointerup", done);
+        el.addEventListener("pointercancel", done);
+        el.addEventListener("dblclick", () => {
+          v = def;
+          el.title = apply(v) || "";
+          draw();
+        });
+      }
+
+      /**
+       * A deck card carries everything, always expanded: with one card
+       * open per channel, the thumbnails are the fold and the card is
+       * what opening one means.
+       */
+      function deckCard(deck, di) {
+        const rate = deck.rate;
+        const stretched = Math.abs(Math.log2(rate)) > 0.45;
+        const tape = deck.pitchMode === "tape";
+        const p = (r) => `data-role="${r}" data-di="${di}"`;
+        const knob = (role, label, idle) =>
+          `<div class="knobrow"${idle ? ' data-idle="true"' : ""}>` +
+          `<div class="knob" ${p(role)}><i></i></div>` +
+          `<span>${label}</span></div>`;
+        const group = (inner) => `<span class="deckcard__cell">${inner}</span>`;
+        return (
+          `<div class="deckcard" data-di="${di}">` +
+          // What it is, every readout on its one line · pan/level/mute ·
+          // the deck's housekeeping, under the channel's clear.
+          `<div class="deckcard__top">` +
+          `<div class="deckcard__id">` +
+          `<div class="deckcard__title">${deck.loop.title || deck.item.file}</div>` +
+          `<div class="u-faint ht-type-small">${fmtBpm(deck.loop.bpm)} bpm · ${
+            deck.loop.beats
+          } beats · ${keyLabel(deck.loop)} · <span${
+            stretched ? ' data-stretched="true"' : ""
+          }>×${rate.toFixed(3)}</span>${
+            deck.tempoFactor !== 1 ? " " + factorLabel(deck.tempoFactor) : ""
+          }${
+            tape
+              ? ""
+              : ` · <span class="num" ${p("pitchVal")} title="${pitchTitle(
+                  deck
+                )}">${pitchLabel(deck)}</span>`
+          }</div>` +
+          `</div>` +
+          `<div class="deckcard__strip">` +
+          knob("kPan", "pan") +
+          `<div class="deckcard__vol">` +
+          `<input type="range" class="vfader" ${p(
+            "gain"
+          )} min="0" max="1.5" step="0.01" value="${deck.gain}" title="level" />` +
+          `<button ${p("mute")} aria-pressed="${deck.muted}">mute</button>` +
+          `</div>` +
+          `</div>` +
+          `<div class="deckcard__ops">` +
+          `<button ${p("eject")}>✕</button>` +
+          `<button ${p("dupe")} title="copy this deck to the other side">→ ${
+            deck.channelId === "a" ? "B" : "A"
+          }</button>` +
+          `</div>` +
+          `</div>` +
+          // How it plays: engine · mode · tempo · beats.
+          `<div class="deckcard__row">` +
+          group(
+            `<select ${p("pengine")} title="pitch engine">` +
+              ["auto", "pitched", "tape", "grain"]
+                .map(
+                  (v) =>
+                    `<option value="${v}"${
+                      deck.engineChoice === v ? " selected" : ""
+                    }>${v}</option>`
+                )
+                .join("") +
+              `</select>` +
+              `<span class="num">${
+                deck.engineChoice === "auto"
+                  ? deck.pitchMode === "pitched"
+                    ? "vocoder"
+                    : deck.pitchMode
+                  : ""
+              }</span>`
+          ) +
+          group(
+            `<select ${p("mode")} title="free loops at its own length · grid retriggers on every boundary">` +
+              `<option value="free"${deck.mode === "free" ? " selected" : ""}>free</option>` +
+              `<option value="grid"${deck.mode === "grid" ? " selected" : ""}>grid</option>` +
+              `</select>`
+          ) +
+          group(
+            `<button ${p("half")} title="half speed">½</button>` +
+              `<button ${p("double")} title="double speed">2×</button>` +
+              `<button ${p("rev")} aria-pressed="${deck.reversed}">reverse</button>` +
+              `<span class="num">${fmtBpm(deck.sourceBpm)}</span>`
+          ) +
+          group(
+            `<select ${p("from")} title="which beat it starts on">` +
+              Array.from(
+                { length: deck.loop.beats },
+                (_, v) =>
+                  `<option value="${v}"${
+                    v === deck.fromBeat ? " selected" : ""
+                  }>${v}</option>`
+              ).join("") +
+              `</select>` +
+              `<select ${p("count")} title="how many beats it plays">` +
+              Array.from(
+                { length: deck.loop.beats },
+                (_, i) =>
+                  `<option value="${i + 1}"${
+                    i + 1 === deck.playBeats ? " selected" : ""
+                  }>${i + 1}</option>`
+              ).join("") +
+              `</select>` +
+              (deck.fromBeat + deck.playBeats > deck.loop.beats
+                ? `<span class="num">wraps</span>`
+                : "")
+          ) +
+          `</div>` +
+          // What shapes it. The pitch knob is a meter under tape, so the
+          // knob band is the same band in every engine.
+          `<div class="deckcard__row">` +
+          `<div class="knobs">` +
+          knob("kPitch", "pitch", tape) +
+          knob("kFilter", "filter") +
+          knob("kRes", "res") +
+          knob("kDrive", "drive") +
+          `</div>` +
+          (tape
+            ? ""
+            : `<button ${p("octDown")} title="an octave down">−12</button>` +
+              `<button ${p("octUp")} title="an octave up">+12</button>` +
+              `<button ${p("key")} aria-pressed="${deck.matchKey}">${
+                deck.matchKey ? "key ✓" : "key ✗"
+              }</button>`) +
+          `</div>` +
+          // The one control that turns the mix around this deck.
+          `<div class="deckcard__row">` +
+          `<button ${p(
+            "sync"
+          )} title="make this the reference: the mix takes its tempo and key, everything else snaps to it">sync all to this</button>` +
+          `</div>` +
+          `</div>`
+        );
+      }
+
+      function wireDeckCard(host, deck, di) {
+        const q = (r) => host.querySelector(`[data-role="${r}"][data-di="${di}"]`);
+        // Toggled in place rather than through renderChannels, so opening a
+        // panel does not rebuild every other card underneath the pointer.
+        q("pengine").addEventListener("change", (e) => {
+          deck.setEngineChoice(e.target.value);
+          renderChannels();
+        });
+        q("mode").addEventListener("change", (e) => {
+          deck.setMode(e.target.value);
+          renderChannels();
+        });
+        q("rev").addEventListener("click", () => {
+          deck.setReversed(!deck.reversed);
+          renderChannels();
+        });
+        // Pitch belongs to both engines that hold it — the vocoder and
+        // grain. Tape has no pitch of its own to wire.
+        if (deck.pitchMode !== "tape") {
+          const showPitch = () => {
+            const el = q("pitchVal");
+            el.textContent = pitchLabel(deck);
+            el.title = pitchTitle(deck);
+          };
+          wireKnob(q("kPitch"), {
+            min: -24,
+            max: 24,
+            value: deck.pitchOffset,
+            def: 0,
+            apply: (v) => {
+              deck.setPitchOffset(v);
+              showPitch();
+              return pitchLabel(deck);
+            },
+          });
+          // Octave jumps re-render, so the knob's angle follows them.
+          q("octDown").addEventListener("click", () => {
+            deck.setPitchOffset(deck.pitchOffset - 12);
+            renderChannels();
+          });
+          q("octUp").addEventListener("click", () => {
+            deck.setPitchOffset(deck.pitchOffset + 12);
+            renderChannels();
+          });
+          q("key").addEventListener("click", () => {
+            deck.matchKey = !deck.matchKey;
+            deck.refresh();
+            renderChannels();
+          });
+        } else {
+          // Tape's pitch is its rate. The knob stays put as a meter, its
+          // needle at the pitch the rate imposes.
+          const el = q("kPitch");
+          const t = Math.max(0, Math.min(1, (deck.tapeSemitones + 24) / 48));
+          el.querySelector("i").style.transform =
+            "rotate(" + (-135 + 270 * t) + "deg)";
+          el.title = st(deck.tapeSemitones) + " st";
+        }
+        wireKnob(q("kFilter"), {
+          min: -1,
+          max: 1,
+          value: deck.filterAt,
+          def: 0,
+          apply: (v) => {
+            deck.setFilter(v);
+            return "filter " + deck.filterLabel();
+          },
+        });
+        wireKnob(q("kRes"), {
+          min: 0.5,
+          max: 14,
+          value: deck.resonance,
+          def: 1,
+          apply: (v) => {
+            deck.setResonance(v);
+            return "res " + v.toFixed(1);
+          },
+        });
+        q("sync").addEventListener("click", () => {
+          engine.syncAllTo(deck);
+          $("mBpm").value = fmtBpm(engine.bpm);
+          $("mRoot").value = engine.key.root;
+          $("mMode").value = engine.key.mode;
+          renderDecks();
+        });
+        q("gain").addEventListener("input", (e) => {
+          deck.gain = parseFloat(e.target.value);
+          deck.applyGain();
+        });
+        wireKnob(q("kDrive"), {
+          min: 0,
+          max: 1,
+          value: deck.drive,
+          def: 0,
+          apply: (v) => {
+            deck.setDrive(v);
+            return "drive " + Math.round(v * 100);
+          },
+        });
+        wireKnob(q("kPan"), {
+          min: -1,
+          max: 1,
+          value: deck.pan,
+          def: 0,
+          apply: (v) => {
+            deck.setPan(v);
+            return "pan " + v.toFixed(2);
+          },
+        });
+        q("mute").addEventListener("click", () => {
+          deck.muted = !deck.muted;
+          deck.applyGain();
+          renderChannels();
+        });
+        q("eject").addEventListener("click", () => {
+          engine.remove(deck);
+          renderDecks();
+        });
+        // Same loop, same settings, other side — the usual way to set up a
+        // transition without rebuilding it by hand.
+        q("dupe").addEventListener("click", async () => {
+          const other = deck.channelId === "a" ? "b" : "a";
+          const copy = await engine.add(other, deck.item);
+          if (copy) {
+            for (const k of [
+              "pitchOffset",
+              "matchKey",
+              "tempoFactor",
+              "gain",
+              "pan",
+              "muted",
+              "mode",
+              "fromBeat",
+              "playBeats",
+              "engineChoice",
+            ])
+              copy[k] = deck[k];
+            copy.pitchMode = copy.decideEngine();
+            if (deck.reversed) copy.setReversed(true);
+            copy.setDrive(deck.drive);
+            copy.setFilter(deck.filterAt);
+            copy.setResonance(deck.resonance);
+            copy.applyGain();
+            copy.refresh();
+          }
+          renderDecks();
+        });
+        for (const [role, speed] of [
+          ["half", 0.5],
+          ["double", 2],
+        ])
+          q(role).addEventListener("click", () => {
+            deck.setTempoFactor(deck.tempoFactor / speed);
+            renderChannels();
+          });
+        const applyRange = () => {
+          deck.setRange(
+            parseInt(q("from").value, 10) || 0,
+            parseInt(q("count").value, 10) || deck.loop.beats
+          );
+          renderChannels();
+        };
+        for (const role of ["from", "count"])
+          q(role).addEventListener("change", applyRange);
+      }
+
+      // ── the beat strips ─────────────────────────────────────────────
+      // A strip per deck, beside the deck it belongs to, plus the grid at the
+      // top. Cells are elements: only the two that changed are touched each
+      // frame, so this costs nothing to run continuously.
+      function fillStrip(el, cells, accent) {
+        if (+el.dataset.cells === cells && +el.dataset.accent === (accent || 0))
+          return;
+        el.dataset.cells = cells;
+        el.dataset.accent = accent || 0;
+        el.innerHTML = Array.from(
+          { length: cells },
+          (_, i) => `<i${accent && i % accent === 0 ? " data-accent" : ""}></i>`
+        ).join("");
+        el.dataset.at = -1;
+      }
+      function litAt(el, i) {
+        const prev = +el.dataset.at;
+        if (prev === i) return;
+        if (prev >= 0 && el.children[prev])
+          el.children[prev].removeAttribute("data-on");
+        if (i >= 0 && el.children[i]) el.children[i].setAttribute("data-on", "");
+        el.dataset.at = i;
+      }
+
+      function drawBeats() {
+        if (!engine) return;
+        const now = engine.ctx.currentTime;
+        const grid = $("gridStrip");
+        fillStrip(grid, engine.grid, engine.meter);
+        litAt(
+          grid,
+          engine.playing
+            ? ((Math.floor(engine.transport.beatAt(now)) % engine.grid) +
+                engine.grid) %
+                engine.grid
+            : -1
+        );
+        // a strip per track, under the main bar
+        for (const strip of $("trackStrips").children) {
+          const deck = engine.channels[strip.dataset.ch].decks[+strip.dataset.di];
+          if (!deck) continue;
+          const pos = engine.playing ? deck.positionAt(now) : null;
+          // In grid mode the strip is the grid, with the sounding part of
+          // it lit; in free mode it is the deck's own cycle.
+          const cells =
+            deck.mode === "grid"
+              ? engine.grid
+              : Math.max(1, Math.round(deck.spanInMixBeats));
+          fillStrip(strip, cells, engine.meter);
+          litAt(strip, pos ? pos.beat % cells : -1);
+        }
+        for (const id of ["a", "b"]) {
+          const host = document.querySelector(`.channel[data-ch="${id}"]`);
+          const decks = engine.channels[id].decks;
+          // every thumbnail's wipe, whether its card is open or not
+          decks.forEach((deck, di) => {
+            const wipe = host.querySelector(
+              `.deckthumb[data-dg="${di}"] .deckthumb__wipe`
+            );
+            if (wipe) {
+              const pos = engine.playing ? deck.positionAt(now) : null;
+              const deg = pos ? ((pos.beat + pos.fraction) / pos.beats) * 360 : 0;
+              wipe.style.setProperty("--deg", deg.toFixed(1));
+            }
+          });
+        }
+      }
+      (function tick() {
+        drawBeats();
+        requestAnimationFrame(tick);
+      })();
+
+      // Reported, not thrown into the void. A rejected promise here shows as
+      // one line among a browser extension's own noise, which is no way to
+      // find out that the mixer never started.
+      function mixError(where, err) {
+        const msg = where + ": " + (err && err.message ? err.message : err);
+        $("mixNotes").textContent = msg;
+        console.error(msg, err);
+      }
+
+      $("bPlay").addEventListener("click", async () => {
+        if (!engine) return;
+        try {
+          if (engine.playing) {
+            engine.stop();
+            $("bPlay").textContent = "▶ play";
+          } else {
+            $("bPlay").textContent = "…";
+            await engine.start();
+            $("bPlay").textContent = engine.playing ? "■ stop" : "▶ play";
+          }
+        } catch (err) {
+          $("bPlay").textContent = "▶ play";
+          mixError("play", err);
+        }
+      });
+
+      /* ── capture ─────────────────────────────────────────────────────
+         The mix, bounced: one full cycle of what the master is sending
+         the speakers, recorded on the grid and encoded as a new loop
+         stegassette. The cycle is the least length on which every
+         sounding deck and the grid land together, so the bounce loops as
+         seamlessly as its parts. The picture is the sounding decks'
+         artwork, tiled — a mix's cover is the covers it is made of. */
+
+      function cycleBeats() {
+        const active = engine.decks.filter(
+          (d) => !d.muted && (d.source || d.shots.length)
+        );
+        const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        let l = engine.grid;
+        for (const d of active) {
+          const s = Math.max(1, Math.round(d.spanInMixBeats));
+          l = (l * s) / gcd(l, s);
+        }
+        return Math.min(64, l);
+      }
+
+      async function collageOf(decks) {
+        const urls = [
+          ...new Set(
+            decks
+              .map((d) => (library.find((l) => l.item === d.item) || {}).url)
+              .filter(Boolean)
+          ),
+        ];
+        const imgs = await Promise.all(
+          urls.map(
+            (u) =>
+              new Promise((res, rej) => {
+                const im = new Image();
+                im.onload = () => res(im);
+                im.onerror = rej;
+                im.src = u;
+              })
+          )
+        );
+        const n = Math.max(1, imgs.length);
+        const cols = Math.ceil(Math.sqrt(n));
+        const rows = Math.ceil(n / cols);
+        const TILE = 512;
+        const cnv = Object.assign(document.createElement("canvas"), {
+          width: cols * TILE,
+          height: rows * TILE,
+        });
+        const g = cnv.getContext("2d", { willReadFrequently: true });
+        g.fillStyle = "#000";
+        g.fillRect(0, 0, cnv.width, cnv.height);
+        imgs.forEach((im, i) => {
+          const c = i % cols;
+          const r = (i / cols) | 0;
+          const s = Math.max(TILE / im.width, TILE / im.height);
+          g.save();
+          g.beginPath();
+          g.rect(c * TILE, r * TILE, TILE, TILE);
+          g.clip();
+          g.drawImage(
+            im,
+            c * TILE + (TILE - im.width * s) / 2,
+            r * TILE + (TILE - im.height * s) / 2,
+            im.width * s,
+            im.height * s
+          );
+          g.restore();
+        });
+        return new Stegassette.Img(
+          cnv.width,
+          cnv.height,
+          new Uint8Array(g.getImageData(0, 0, cnv.width, cnv.height).data)
+        );
+      }
+
+      $("bCapture").addEventListener("click", async () => {
+        if (!engine) return;
+        const btn = $("bCapture");
+        try {
+          if (!engine.playing) throw new Error("play first — capture records the mix");
+          const beats = cycleBeats();
+          btn.disabled = true;
+          btn.textContent = "capturing " + beats + " beats…";
+          const rec = await engine.capture(beats);
+          normalizeTo(rec.channels, Math.pow(10, -1 / 20));
+          const active = engine.decks.filter(
+            (d) => !d.muted && (d.source || d.shots.length)
+          );
+          const carrier = await collageOf(active);
+          const loop = buildLoop({
+            frames: rec.frames,
+            sampleRate: rec.sampleRate,
+            beats,
+            meter: engine.meter,
+            origin: 0,
+            title: "mix",
+            root: engine.key.root,
+            mode: engine.key.mode,
+          });
+          const entries = [
+            Stegassette.buildAudioEntry({
+              channels: rec.channels,
+              sampleRate: rec.sampleRate,
+              bitsPerSample: 16,
+              layout: "planar",
+              name: (slug(loop.title) || "mix") + ".pcm",
+            }),
+            loopEntry(loop),
+          ];
+          const out = Stegassette.encodeStegassette(
+            entries,
+            carrier,
+            Stegassette.COLLECTION_STEG
+          );
+          const blob = await imgToPngBlob(out);
+          const name = loopFileName(loop);
+          $("mixOut").innerHTML =
+            `<div class="ht-arrange-row"><a href="${URL.createObjectURL(
+              blob
+            )}" download="${name}">↓ ${name}</a>` +
+            `<span class="u-faint ht-type-small">${out.width}×${out.height} · ${
+              beats
+            } beats · ${fmtBpm(loop.bpm)} bpm · ${keyLabel(loop)}</span></div>`;
+        } catch (err) {
+          mixError("capture", err);
+        }
+        btn.disabled = false;
+        btn.textContent = "capture ↓";
+      });
+
+      // One sync for the whole mix, instead of one per deck. It reads
+      // "syncing" until the boundary it queued arrives, so a press with a
+      // long grid in front of it does not look ignored.
+      $("bSync").addEventListener("click", (e) => {
+        if (!engine || !engine.playing) return;
+        const when = engine.realignAll();
+        if (when == null) return;
+        const btn = e.target;
+        btn.textContent = "syncing";
+        setTimeout(
+          () => (btn.textContent = "sync"),
+          Math.max(0, (when - engine.ctx.currentTime) * 1000)
+        );
+      });
+
+      $("mBpm").addEventListener("input", () => {
+        const v = parseFloat($("mBpm").value);
+        if (!engine || !v) return;
+        engine.setBpm(v);
+        renderDecks();
+      });
+      for (const id of ["mRoot", "mMode"])
+        $(id).addEventListener("change", () => {
+          if (!engine) return;
+          engine.setKey({ root: $("mRoot").value, mode: $("mMode").value });
+          renderDecks();
+        });
+      $("mGrid").addEventListener("input", () => {
+        if (!engine) return;
+        $("mGrid").value = engine.setGrid(parseInt($("mGrid").value, 10) || 4);
+      });
+      $("mMatch").addEventListener("change", () => {
+        if (!engine) return;
+        engine.setKeyMatch($("mMatch").value);
+        renderDecks();
+      });
+      // Two paragraphs you read once and then look past for the rest of the
+      // session, so they start closed.
+      $("bHelp").addEventListener("click", (e) => {
+        const help = $("mixHelp");
+        help.hidden = !help.hidden;
+        e.target.setAttribute("aria-expanded", String(!help.hidden));
+      });
+
+      $("mMaster").addEventListener("input", () => {
+        engine?.setMasterGain(parseFloat($("mMaster").value));
+      });
+      $("mCross").addEventListener("input", () => {
+        engine?.setCrossfade(parseFloat($("mCross").value));
+      });
+      // A fader thrown to the far side is the ordinary way to leave a
+      // transition, so make it one press rather than a drag.
+      $("bCut").addEventListener("click", () => {
+        if (!engine) return;
+        const to = engine.crossfade < 0.5 ? 1 : 0;
+        engine.setCrossfade(to);
+        $("mCross").value = to;
+      });
+
+      wireDrop($("mixDrop"), $("mixFiles"), (files) =>
+        takeMixFiles(files).catch((err) => mixError("loading", err))
+      );
+
+
+      /**
+       * Where the signal dies, measured at every stage of one deck's chain.
+       * Run it while the mix is playing and paste the result back.
+       *
+       * Everything upstream of the first zero is working, so the first stage
+       * that reads silence is the one to look at. `buffer` is the audio in
+       * memory and `source` is that audio actually leaving the source node —
+       * if buffer is loud and source is silent, nothing is playing; if source
+       * is loud and the engine stage is silent, that engine is.
+       */
+      window.mixTrace = async (ms = 900, di = 0) => {
+        if (!engine || !engine.decks.length) return "no decks loaded";
+        const d = engine.decks[di] || engine.decks[0];
+        const ctx = engine.ctx;
+        const rmsOf = (arr) => {
+          let r = 0;
+          for (let i = 0; i < arr.length; i++) r += arr[i] * arr[i];
+          return Math.sqrt(r / arr.length);
+        };
+        const taps = [];
+        const tap = (node, name) => {
+          if (!node) return;
+          const a = ctx.createAnalyser();
+          a.fftSize = 2048;
+          node.connect(a);
+          taps.push([name, a]);
+        };
+        tap(d.source, "1 source");
+        tap(d.transformation && d.transformation.phaseVocoderNode, "2 vocoder");
+        tap(d.tapeDelay, "2 tape delay");
+        tap(d.grainNode, "2 grain");
+        tap(d.gainNode, "3 deck gain");
+        tap(d.driveNode, "3b drive");
+        tap(d.filterNode, "4 deck filter");
+        tap(d.panNode, "5 deck pan");
+        tap(engine.channels[d.channelId].gain, "6 channel gain");
+        tap(engine.channels[d.channelId].filter, "7 channel filter");
+        tap(engine.master, "8 master");
+        await new Promise((r) => setTimeout(r, ms));
+        const buf = new Float32Array(2048);
+        const stages = {};
+        for (const [name, a] of taps) {
+          a.getFloatTimeDomainData(buf);
+          stages[name] = +rmsOf(buf).toFixed(6);
+          a.disconnect();
+        }
+        const chan = engine.channels[d.channelId];
+        return JSON.stringify(
+          {
+            stages,
+            buffer: {
+              rms: +rmsOf(d.buffer.getChannelData(0)).toFixed(5),
+              frames: d.buffer.length,
+              channels: d.buffer.numberOfChannels,
+              rate: d.buffer.sampleRate,
+              ctxRate: ctx.sampleRate,
+            },
+            deck: {
+              engine: d.engineChoice + " → " + d.pitchMode,
+              tapeError: +d.tapeErrorSemitones.toFixed(2),
+              mode: d.mode,
+              hasSource: !!d.source,
+              shots: d.shots.length,
+              startedInPast: d.startedAt != null && d.startedAt < ctx.currentTime,
+              secondsSinceStart:
+                d.startedAt == null
+                  ? null
+                  : +(ctx.currentTime - d.startedAt).toFixed(2),
+              rate: +d.rate.toFixed(3),
+              semitones: +d.semitones.toFixed(2),
+              makeup: +d.makeupOffRoot.toFixed(3),
+              gainNode: +d.gainNode.gain.value.toFixed(3),
+              muted: d.muted,
+              pan: d.panNode.pan.value,
+              drive: d.drive,
+              loopStart: d.source ? +d.source.loopStart.toFixed(3) : null,
+              loopEnd: d.source ? +d.source.loopEnd.toFixed(3) : null,
+              playbackRate: d.source
+                ? +d.source.playbackRate.value.toFixed(3)
+                : null,
+            },
+            chain: {
+              channelGain: +chan.gain.gain.value.toFixed(3),
+              channelFilter:
+                chan.filter.type + " " + Math.round(chan.filter.frequency.value),
+              master: +engine.master.gain.value.toFixed(3),
+              crossfade: engine.crossfade,
+              ctxState: ctx.state,
+              playing: engine.playing,
+            },
+          },
+          null,
+          1
+        );
+      };
+
+      /* ── the demo set ────────────────────────────────────────────────
+         media/index.json is a plain list of filenames sitting next to the
+         PNGs it names. A static host has no directory listing worth relying
+         on — GitHub Pages certainly has none — so the manifest is the only
+         thing that knows what is in there, and adding a loop to the demo
+         means dropping the PNG in and adding its name to the list.
+
+         The loops go through takeMixFiles, the same path a drag from the
+         desktop takes, so the demo cannot drift into a special case. */
+      let demoFiles = [];
+      (async () => {
+        try {
+          const res = await fetch("media/index.json", { cache: "no-cache" });
+          if (!res.ok) return;
+          const list = await res.json();
+          demoFiles = (Array.isArray(list) ? list : []).filter(
+            (n) => typeof n === "string" && /\.png$/i.test(n)
+          );
+          if (!demoFiles.length) return;
+          $("demoRow").hidden = false;
+        } catch (_) {
+          /* no manifest, no button */
+        }
+      })();
+
+      $("bDemo").addEventListener("click", async () => {
+        const btn = $("bDemo");
+        btn.disabled = true;
+        const was = btn.textContent;
+        try {
+          const files = [];
+          for (let i = 0; i < demoFiles.length; i++) {
+            btn.textContent = "loading " + (i + 1) + "/" + demoFiles.length;
+            const res = await fetch("media/" + demoFiles[i]);
+            if (!res.ok) throw new Error(demoFiles[i] + ": " + res.status);
+            files.push(
+              new File([await res.blob()], demoFiles[i], { type: "image/png" })
+            );
+          }
+          await takeMixFiles(files);
+          $("demoRow").hidden = true;
+        } catch (err) {
+          $("mixNotes").textContent = "demo set: " + err.message;
+          btn.textContent = was;
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
