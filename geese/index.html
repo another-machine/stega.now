@@ -70,18 +70,15 @@
         max-height: 90svh;
         max-width: 90svw;
       }
-      .work .player {
-        max-height: min(90svh, var(--og-height));
-        width: min(90svw, var(--og-width));
-      }
-      .work .player > canvas {
-        display: block;
-        height: 100%;
-        image-rendering: pixelated;
-        left: 0;
+      /* The base canvas sizes the player, the way amplib-gallery sizes any
+         picture — both edges free, each capped — so a tall stegassette keeps
+         its shape. A width on the wrapper made the two caps fight: 90svh
+         clamped the height, the width stayed at 90svw, and the canvases,
+         stretched to fill, wore the difference. The overlay covers the base,
+         which is now the box the frame and the glow hang on. */
+      .work .player > canvas.overlay {
+        inset: 0;
         position: absolute;
-        top: 0;
-        width: 100%;
       }
     </style>
   </head>

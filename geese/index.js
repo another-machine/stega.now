@@ -35,7 +35,6 @@ document.querySelectorAll("section").forEach((section) => {
           });
           player.element.style.setProperty("--og-width", `${player.width}px`);
           player.element.style.setProperty("--og-height", `${player.height}px`);
-          player.element.style.aspectRatio = `${player.width} / ${player.height}`;
           button.appendChild(player.element);
           thumb.classList.add("gal-ghost");
           thumb.setAttribute("aria-hidden", "true");
