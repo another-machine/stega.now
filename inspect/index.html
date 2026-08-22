@@ -455,13 +455,7 @@
         const kind = kindOf(mimetype);
         if (kind === "pcm") {
           box.appendChild(
-            el(
-              "p",
-              "note",
-              "raw PCM · " +
-                pcmFacts(mimetype, data.length) +
-                " — plays in home",
-            ),
+            el("p", "note", "raw PCM · " + pcmFacts(mimetype, data.length)),
           );
         } else if (kind === "text" || kind === "html") {
           const j = asJson({ mimetype, name, data });
